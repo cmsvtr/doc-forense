@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# dados de casos nunca vão para o repositório
+casos/
+tessdata/*.traineddata

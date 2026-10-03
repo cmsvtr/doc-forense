@@ -1,0 +1,15 @@
+[server]
+# Só aceita conexões deste computador: os documentos nunca ficam acessíveis pela rede.
+address = "localhost"
+port = 8501
+# O navegador é aberto pelo abrir.bat; headless evita a pergunta de e-mail no primeiro uso.
+headless = true
+maxUploadSize = 2048
+
+[browser]
+# Não envia estatísticas de uso para fora.
+gatherUsageStats = false
+serverAddress = "localhost"
+
+[client]
+toolbarMode = "minimal"
