@@ -23,7 +23,8 @@ def _filtrar(achados: list[dict], incluir_pendentes: bool) -> list[dict]:
 
 def _fonte(a: dict) -> dict:
     return {"localizador": a["localizador"], "caminho": a["caminho"], "pagina": a["pagina"],
-            "trecho": a["trecho_fonte"], "achado_id": a["id"], "status": a.get("revisao", {}).get("status", "pendente")}
+            "trecho": a["trecho_fonte"], "achado_id": a["id"], "documento_id": a.get("documento_id"),
+            "correcoes": a.get("correcoes", {}), "status": a.get("revisao", {}).get("status", "pendente")}
 
 
 def dramatis_personae(achados: list[dict], incluir_pendentes: bool = False) -> dict:

@@ -54,7 +54,9 @@ Nos resultados da Busca, nos trechos da Triagem e na aba Documento, o botão **�
    - **Analisar:** escolha os documentos (por padrão, os primeiros da triagem).
    - **Revisar achados:** cada pessoa, empresa ou evento vem com o trecho do documento, a página e o botão para abrir o original. A máquina já descartou o que não encontrou no texto. Valide ou rejeite.
    - **Dramatis personae** e **Linha do tempo:** montados só com o que você validou.
-9. **Relatório e custódia:** relatório Word de apoio, verificação de integridade e exportação para a skill `sg-nt:instrucao`.
+   - **Fichas individuais** (em Dramatis personae): escolha as pessoas e clique em "Gerar fichas". Cada ficha junta o que foi validado sobre a pessoa com o que a teia de comunicações sabe dela (e-mails, organização, com quem se comunicou, mensagens). O Word da ficha só é gerado se você pedir.
+   - **📄 e ✎ Corrigir:** todo item da ficha, da linha do tempo e das mensagens de um par abre o documento de origem e pode ser corrigido. A correção pede o motivo e aparece na tela marcada com ✎, junto com o valor anterior. A máquina confere se o valor proposto aparece na página de origem e marca "confere com o texto", "não encontrado no texto" ou "não verificável". A correção não é aceita às cegas. Tudo vai para `analise/correcoes.jsonl`, que só cresce.
+8. **Relatório e custódia:** relatório Word de apoio, verificação de integridade, exportação para a skill `sg-nt:instrucao` e o log de correções (para baixar, só a versão completa: contém trechos dos autos, envie só a quem pode vê-los).
 
 **Excluir um caso:** na barra lateral, "Excluir caso". A pasta inteira vai para a Lixeira do Windows (recuperável) e a exclusão fica registrada em `casos/_excluidos.jsonl`, com o hash do manifesto.
 
@@ -75,7 +77,8 @@ casos/<nome>/
   originais/          documentos de entrada (nunca alterados)
   extraido/           CAMADA BRUTA: um JSON por documento (texto fiel, página a página)
     caixas/<id>/      caixas de palavra do OCR (TSV do Tesseract), por página
-  analise/            CAMADA ANALÍTICA: triagem (na etapa 2, os achados da IA)
+  analise/            CAMADA ANALÍTICA: triagem, achados da IA, revisão, perguntas
+    correcoes.jsonl   log de correções do analista (com trechos dos documentos: sigiloso)
   relatorios/         relatórios Word
   indice.sqlite       índice de busca (descartável; é reconstruído a partir de extraido/)
   manifesto.json      cadeia de custódia: SHA-256 dos originais e das extrações, ferramentas, parâmetros

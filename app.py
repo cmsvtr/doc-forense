@@ -97,6 +97,74 @@ def destacar(trecho: str) -> str:
     return html.escape(" ".join(trecho.split())).replace("«", "<mark>").replace("»", "</mark>")
 
 
+# ------------------------------------------------------------------ itens com 📄 abrir e ✎ corrigir
+
+def versao_das_correcoes(caso: Caso) -> float:
+    arq = caso.analise / "correcoes.jsonl"
+    return arq.stat().st_mtime if arq.exists() else 0.0
+
+
+def _como_texto(valor) -> str:
+    return "; ".join(valor) if isinstance(valor, list) else str(valor or "")
+
+
+def formulario_correcao(caso: Caso, item: dict, chave: str):
+    from forense.correcoes import CAMPOS, NAO_VERIFICAVEIS, registrar
+
+    with st.container(border=True):
+        campo = st.selectbox("O que está errado", CAMPOS[item["tipo"]], key=f"cc_{chave}")
+        atual = _como_texto(item["dados"].get(campo))
+        dica = {"data": "AAAA-MM-DD (ou AAAA-MM-DDTHH:MM)", "participantes": "nomes separados por «;»",
+                "para": "Nome <e-mail>; Nome <e-mail>", "de": "Nome <e-mail>"}.get(campo, "")
+        novo = st.text_input(f"Valor correto{f' ({dica})' if dica else ''}", value=atual, key=f"cv_{chave}_{campo}",
+                             help="Deixe em branco para apagar o valor.")
+        motivo = st.text_area("Por quê (o que você viu no documento)", key=f"cm_{chave}", height=70)
+        if campo in NAO_VERIFICAVEIS:
+            st.caption("Este campo é interpretação; a máquina não tem como conferi-lo no texto.")
+        b1, b2 = st.columns(2)
+        if b1.button("Registrar correção", key=f"cs_{chave}", type="primary",
+                     disabled=not motivo.strip() or novo.strip() == atual.strip()):
+            r = registrar(caso, item["alvo"], campo, item["dados"].get(campo), novo, motivo, contexto=item.get("contexto"))
+            st.session_state["aviso_correcao"] = f"Correção registrada. Conferência da máquina: {r['conferencia_maquina']}."
+            st.session_state.pop("corrigindo", None)
+            st.rerun()
+        if b2.button("Cancelar", key=f"cx_{chave}"):
+            st.session_state.pop("corrigindo", None)
+            st.rerun()
+
+
+def mostrar_item(caso: Caso, item: dict, chave: str):
+    """Um item (ficha, linha do tempo, mensagem): o quê, o trecho, a fonte, 📄 abrir e ✎ corrigir."""
+    with st.container(border=True):
+        datado = item["tipo"] in ("eventos", "mensagem")
+        data = f"**{html.escape((item['data'] or 'sem data').replace('T', ' '))}** · " if datado else ""
+        status = "" if item["status"] in ("validado", "máquina") else f" · {html.escape(item['status'])}"
+        st.markdown(f"{data}{html.escape(item['descricao'])}{' ✎' if item['correcoes'] else ''}{status}")
+        for campo, c in item["correcoes"].items():
+            st.caption(f"✎ {campo} corrigido pelo analista (antes: {_como_texto(c['anterior']) or 'vazio'}) · "
+                       f"conferência da máquina: {c['conferencia']}")
+        rodape = f"<span style='color:gray'>{html.escape(item['localizador'])}</span>"
+        if item["trecho"]:
+            st.markdown(f"<blockquote>{html.escape(' '.join(item['trecho'].split()))}</blockquote>{rodape}",
+                        unsafe_allow_html=True)
+        else:
+            st.markdown(rodape, unsafe_allow_html=True)
+        b1, b2, _ = st.columns([1, 1, 3])
+        with b1:
+            botao_abrir(caso, item["caminho"], item["pagina"], f"ab_{chave}")
+        if b2.button("✎ Corrigir", key=f"co_{chave}"):
+            st.session_state["corrigindo"] = None if st.session_state.get("corrigindo") == chave else chave
+            st.rerun()
+        if st.session_state.get("corrigindo") == chave:
+            formulario_correcao(caso, item, chave)
+
+
+def paginar(itens: list, chave: str, por_pagina: int = 25) -> list:
+    n = max(1, -(-len(itens) // por_pagina))
+    pag = st.number_input(f"Página (de {n})", 1, n, 1, key=f"pg_{chave}") if n > 1 else 1
+    return list(enumerate(itens))[(pag - 1) * por_pagina: pag * por_pagina]
+
+
 # ------------------------------------------------------------------ barra lateral: caso
 
 BASE_CASOS.mkdir(parents=True, exist_ok=True)
@@ -145,6 +213,8 @@ docs = documentos(str(caso.raiz), marca)
 rodando = em_execucao(caso)
 
 st.header(caso.nome)
+if "aviso_correcao" in st.session_state:
+    st.toast(st.session_state.pop("aviso_correcao"), icon="✏️")
 abas = st.tabs(["1 · Entrada", "2 · Processar", "3 · Triagem", "4 · Busca e perguntas", "5 · Documento",
                 "6 · Comunicações", "7 · IA e revisão", "8 · Relatório e custódia"])
 
@@ -423,7 +493,7 @@ with abas[4]:
 # ------------------------------------------------------------------ 6. comunicações
 
 @st.cache_data
-def teia(raiz: str, versao: float) -> dict:
+def teia(raiz: str, versao: float, versao_correcoes: float) -> dict:
     from forense.comunicacoes import construir_teia
     return construir_teia(Caso(Path(raiz)))
 
@@ -431,7 +501,9 @@ def teia(raiz: str, versao: float) -> dict:
 with abas[5]:
     from forense.comunicacoes import grafo_dot
 
-    tt = teia(str(caso.raiz), marca)
+    from forense.fichas import item_da_mensagem
+
+    tt = teia(str(caso.raiz), marca, versao_das_correcoes(caso))
     st.caption("Montada pela máquina, sem IA, a partir dos cabeçalhos de e-mail (De → Para e Cc) e das conversas "
                "exportadas do WhatsApp (.txt). A pessoa é identificada pelo endereço de e-mail quando há; linhas "
                "vermelhas ligam organizações diferentes (domínios de e-mail distintos).")
@@ -467,23 +539,16 @@ with abas[5]:
         rotulos_par = {f"{p['rotulo_a']} ↔ {p['rotulo_b']} ({p['total']})": p for p in lista_pares}
         if rotulos_par:
             esc_par = rotulos_par[st.selectbox("Ver as mensagens de um par", list(rotulos_par))]
-            for k, m in enumerate(esc_par["mensagens"][:200]):
-                de_ = tt["pessoas"][m["de"]]["rotulo"]
-                para_ = tt["pessoas"][m["para"]]["rotulo"]
-                c_txt, c_bt = st.columns([6, 1])
-                c_txt.markdown(f"**{html.escape((m['data'] or 'sem data').replace('T', ' '))}** · {m['meio']} · "
-                               f"{html.escape(de_)} → {html.escape(para_)}{' (cópia)' if m['copia'] else ''}"
-                               + (f" · «{html.escape(m['assunto'])}»" if m["assunto"] else "")
-                               + f"<br><span style='color:gray'>{html.escape(m['localizador'])}</span>",
-                               unsafe_allow_html=True)
-                with c_bt:
-                    botao_abrir(caso, m["caminho"], m["pagina"], f"com_{k}_{hash(m['localizador'])}")
+            st.caption("Remetente, destinatário ou data lidos errado? Use ✎ Corrigir: a correção vai para o log "
+                       "e a máquina confere se o valor aparece no documento.")
+            for k, m in paginar(esc_par["mensagens"], "com"):
+                mostrar_item(caso, item_da_mensagem(m, tt), f"com_{k}_{m['id']}")
 
 # ------------------------------------------------------------------ 6. IA e revisão
 
 def versao_da_analise(caso: Caso) -> float:
     arquivos = list((caso.analise / "ia").glob("*.json")) if (caso.analise / "ia").is_dir() else []
-    arquivos.append(caso.analise / "revisao.json")
+    arquivos += [caso.analise / "revisao.json", caso.analise / "correcoes.jsonl"]
     return max((a.stat().st_mtime for a in arquivos if a.exists()), default=0.0)
 
 
@@ -640,18 +705,69 @@ with abas[6]:
                         st.markdown(f"<div style='margin-left:1em'>{html.escape(f['localizador'])}: "
                                     f"«{html.escape(' '.join(f['trecho'].split()))}»</div>", unsafe_allow_html=True)
 
+        if dp["pessoas"]:
+            st.subheader("Fichas individuais")
+            st.caption("Geradas sob demanda para as pessoas escolhidas: o que foi validado sobre a pessoa e o que a "
+                       "teia de comunicações sabe dela. Cada item abre o documento de origem e pode ser corrigido.")
+            nomes_dp = [p["nome"] for p in dp["pessoas"]]
+            sel_f = st.multiselect("Pessoas", nomes_dp, key="fichas_sel")
+            f1, f2, _ = st.columns([1, 1, 3])
+            if f1.button("Gerar fichas", type="primary", disabled=not sel_f):
+                st.session_state["fichas_nomes"] = sel_f
+            if st.session_state.get("fichas_nomes") and f2.button("Fechar fichas"):
+                st.session_state.pop("fichas_nomes")
+                st.rerun()
+            mostrar = [n for n in st.session_state.get("fichas_nomes", []) if n in nomes_dp]
+            if mostrar:
+                from forense.fichas import gerar_word, montar
+
+                tt_f = teia(str(caso.raiz), marca, versao_das_correcoes(caso))
+                por_nome = {p["nome"]: p for p in dp["pessoas"]}
+                for nome_f, aba_f in zip(mostrar, st.tabs(mostrar)):
+                    with aba_f:
+                        ficha = montar(por_nome[nome_f], achados, tt_f, incluir_pendentes=incluir)
+                        ident = [("Grafias", ficha["grafias"]), ("Cargos", ficha["cargos"]), ("Empresas", ficha["empresas"]),
+                                 ("E-mails", ficha["enderecos"]), ("Organizações (domínio)", ficha["organizacoes"])]
+                        st.markdown("\n".join(f"- **{r}:** {html.escape('; '.join(v))}" for r, v in ident if v))
+                        st.caption(f"{len(ficha['linha_do_tempo'])} item(ns) na linha do tempo · "
+                                   f"{len(ficha['citacoes'])} citação(ões) · {len(ficha['documentos'])} documento(s)")
+                        if ficha["contrapartes"]:
+                            st.markdown("**Com quem se comunicou**")
+                            st.dataframe(pd.DataFrame([{
+                                "Pessoa": c["pessoa"], "Organização": c["organizacao"] or "—", "Mensagens": c["mensagens"],
+                                "Primeira": c["primeira"][:10], "Última": c["ultima"][:10],
+                                "Entre organizações": "sim" if c["entre_organizacoes"] else ""}
+                                for c in ficha["contrapartes"]]), hide_index=True, use_container_width=True)
+                        st.markdown("**Linha do tempo**")
+                        if not ficha["linha_do_tempo"]:
+                            st.caption("Nenhum evento ou mensagem.")
+                        for k, item in paginar(ficha["linha_do_tempo"], f"fl_{nome_f}"):
+                            mostrar_item(caso, item, f"fl_{k}_{item['alvo']['id']}")
+                        if ficha["citacoes"]:
+                            st.markdown("**Onde é citada**")
+                            for k, item in paginar(ficha["citacoes"], f"fc_{nome_f}"):
+                                mostrar_item(caso, item, f"fc_{k}_{item['alvo']['id']}")
+                        if st.button("Gerar Word desta ficha", key=f"fw_{nome_f}"):
+                            st.session_state[f"ficha_word_{nome_f}"] = str(gerar_word(caso, ficha))
+                        w = st.session_state.get(f"ficha_word_{nome_f}")
+                        if w and Path(w).exists():
+                            st.download_button("⬇ Baixar Word", Path(w).read_bytes(), file_name=Path(w).name,
+                                               key=f"fd_{nome_f}",
+                                               mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
     with sub[3]:
         incluir_lt = st.toggle("Incluir pendentes (prévia)", key="lt_pend")
         lt = linha_do_tempo(achados, incluir_pendentes=incluir_lt)
         if not lt:
             st.info("Nenhum evento validado ainda.")
-        for e in lt:
-            with st.container(border=True):
-                st.markdown(f"**{e['data'] or 'sem data'}** · {html.escape(e['categoria'])}")
-                if e["descricao_ia"]:
-                    st.caption(f"Resumo da IA: {e['descricao_ia']}")
-                st.markdown(f"«{html.escape(' '.join(e['trecho'].split()))}» "
-                            f"<span style='color:gray'>— {html.escape(e['localizador'])}</span>", unsafe_allow_html=True)
+        from forense.fichas import item_do_achado
+
+        por_id = {a["id"]: a for a in achados}
+        for k, e in paginar(lt, "lt"):
+            descricao = e["categoria"] + (f": {e['descricao_ia']} (resumo da IA)" if e["descricao_ia"] else "")
+            if e["participantes"]:
+                descricao += " · participantes: " + ", ".join(e["participantes"])
+            mostrar_item(caso, item_do_achado(por_id[e["achado_id"]], descricao), f"lt_{k}_{e['achado_id']}")
 
 # ------------------------------------------------------------------ 8. relatório e custódia
 
@@ -690,6 +806,25 @@ with abas[7]:
         r = exportar(caso)
         st.success(f"{r['arquivos_txt']} arquivos de texto e {r['paginas_com_caixas']} páginas com caixas de OCR "
                    f"em {r['pasta']}. Instruções no LEIA-ME.txt da pasta.")
+
+    with st.expander("Log de correções do analista"):
+        from forense.correcoes import caminho as caminho_correcoes, ler as ler_correcoes
+
+        cor = ler_correcoes(caso)
+        if not cor:
+            st.caption("Nenhuma correção registrada.")
+        else:
+            st.caption("Cada correção feita com ✎ Corrigir, com a conferência da máquina. Serve para depurar o app "
+                       "(OCR, leitura de cabeçalhos, IA): não é aceita às cegas, e o arquivo nunca é apagado.")
+            st.dataframe(pd.DataFrame([{
+                "quando": c["quando"][:16].replace("T", " "), "campo": c["campo"],
+                "antes": _como_texto(c["valor_anterior"]), "proposto": c["valor_proposto"],
+                "conferência da máquina": c["conferencia_maquina"], "motivo": c["motivo"],
+                "onde": c["alvo"].get("localizador", "")} for c in cor[::-1]]), hide_index=True, use_container_width=True)
+            st.warning("O log completo contém trechos dos documentos do caso (sigilosos). Só envie a quem estiver "
+                       "autorizado a ver os autos.")
+            st.download_button("⬇ Baixar log completo (correcoes.jsonl)", caminho_correcoes(caso).read_bytes(),
+                               file_name=f"correcoes_{caso.nome}.jsonl", mime="application/json")
 
     with st.expander("Registro de auditoria (últimos 50 eventos)"):
         ev = caso.eventos()[-50:][::-1]

@@ -9,6 +9,7 @@ endereço é casado com o endereço que já apareceu com o mesmo nome. A organiz
 e-mail: comunicação entre domínios corporativos diferentes é destacada (concorrentes conversando).
 """
 
+import hashlib
 import re
 from collections import defaultdict
 
@@ -96,13 +97,43 @@ def organizacao(endereco: str | None) -> str | None:
     return None if dominio in DOMINIOS_GENERICOS else dominio
 
 
+def _como_texto(pessoas: list[tuple[str, str | None]]) -> str:
+    """O inverso de participantes(): «Carlos Mendes <carlos@alfa.com>; Marcos» (para mostrar e corrigir)."""
+    return "; ".join(f"{n} <{e}>" if n and e else (n or e or "") for n, e in pessoas)
+
+
 def construir_teia(caso: Caso) -> dict:
     """{"pessoas": {id: {...}}, "pares": [...], "entre_organizacoes": [...], "mensagens": n}."""
+    from .correcoes import vigentes
+
+    correcoes = vigentes(caso)
     brutas = []
     for doc in caso.documentos():
         for m in mensagens_de_email(doc) + mensagens_de_chat(doc):
             m["localizador"] = localizador(doc, [m["pagina"]] if m["pagina"] else None)
             m["caminho"] = doc["arquivo"]["caminhos"][0]
+            m["documento_id"] = doc["documento_id"]
+            # id estável, do conteúdo bruto (antes das correções)
+            base = f"{m['caminho']}|{m['pagina']}|{m['data']}|{m['de']}|{m['para']}|{m['cc']}|{m['assunto']}"
+            m["id"] = hashlib.sha1(base.encode("utf-8")).hexdigest()[:12]
+            m["correcoes"] = {}
+            m["de_texto"], m["para_texto"] = _como_texto([m["de"]]), _como_texto(m["para"] + m["cc"])
+            for campo in ("de", "para", "data", "assunto"):
+                c = correcoes.get((m["id"], campo))
+                if not c:
+                    continue
+                valor = c["valor_proposto"]
+                if campo == "de":
+                    pessoas_ = participantes(valor)
+                    if pessoas_:
+                        m["de"] = pessoas_[0]
+                elif campo == "para":
+                    m["para"], m["cc"] = participantes(valor), []
+                else:
+                    m[campo] = valor
+                m["correcoes"][campo] = {"conferencia": c["conferencia_maquina"], "anterior": c["valor_anterior"]}
+            if m["correcoes"]:
+                m["de_texto"], m["para_texto"] = _como_texto([m["de"]]), _como_texto(m["para"] + m["cc"])
             brutas.append(m)
 
     # identidades: endereço quando houver; o nome sem endereço herda o endereço já visto com o mesmo nome
@@ -133,9 +164,11 @@ def construir_teia(caso: Caso) -> dict:
                 continue
             pessoas[para]["recebidas"] += 1
             par = pares[tuple(sorted((de, para)))]
-            par["mensagens"].append({"de": de, "para": para, "data": m["data"], "assunto": m["assunto"],
+            par["mensagens"].append({"id": m["id"], "de": de, "para": para, "data": m["data"], "assunto": m["assunto"],
                                      "meio": m["meio"], "copia": em_copia, "localizador": m["localizador"],
-                                     "caminho": m["caminho"], "pagina": m["pagina"]})
+                                     "caminho": m["caminho"], "pagina": m["pagina"], "documento_id": m["documento_id"],
+                                     "correcoes": m["correcoes"], "de_texto": m["de_texto"],
+                                     "para_texto": m["para_texto"]})
             par["copia"] += em_copia
 
     def rotulo(pid):

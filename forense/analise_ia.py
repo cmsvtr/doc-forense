@@ -291,13 +291,16 @@ def achados_do_caso(caso: Caso) -> list[dict]:
     saida, vistos = [], set()
     pasta = caso.analise / "ia"
     for arq in sorted(pasta.glob("*.json")) if pasta.is_dir() else []:
-        for t in ler_json(arq).get("trechos", []):
+        r = ler_json(arq)
+        origem = {"modelo": r.get("modelo"), "modelo_digest": r.get("modelo_digest"), "prompt_hash": r.get("prompt_hash")}
+        for t in r.get("trechos", []):
             for a in t.get("achados", []):
                 if a["id"] in vistos:
                     continue
                 vistos.add(a["id"])
-                saida.append({**a, "revisao": rev.get(a["id"], {"status": "pendente"})})
-    return saida
+                saida.append({**a, "revisao": rev.get(a["id"], {"status": "pendente"}), "ia": origem})
+    from .correcoes import aplicar_em_achados, vigentes
+    return aplicar_em_achados(saida, vigentes(caso))
 
 
 # ------------------------------------------------------------------ o caso inteiro
