@@ -56,6 +56,20 @@ def abrir_pasta(p: Path):
         subprocess.Popen(["xdg-open", str(p)])
 
 
+def botao_abrir(caso: Caso, relativo: str, pagina: int | None, chave: str, rotulo: str | None = None):
+    """Botão que abre o original no programa do computador, na página quando é PDF."""
+    from forense.abrir import abrir, caminho_seguro
+
+    if not relativo.lower().endswith(".pdf"):
+        pagina = None  # HTML não tem página
+    if st.button(rotulo or (f"📄 Abrir p. {pagina}" if pagina else "📄 Abrir original"), key=chave):
+        try:
+            como = abrir(caminho_seguro(caso.originais, relativo, caso.raiz), pagina)
+            st.toast(f"Abrindo {Path(relativo).name} {como}")
+        except (OSError, PermissionError) as e:
+            st.error(f"Não consegui abrir: {e}")
+
+
 def destacar(trecho: str) -> str:
     """Escapa o texto do documento (nunca é interpretado como HTML) e realça os termos «assim»."""
     return html.escape(" ".join(trecho.split())).replace("«", "<mark>").replace("»", "</mark>")
@@ -202,15 +216,20 @@ with abas[2]:
         if nomes:
             sel = st.selectbox("Ver por que o documento pontuou", nomes)
             r = next(x for x in t["documentos"] if x["arquivo"] == sel)
+            botao_abrir(caso, r["caminho"], None, f"tri_doc_{r['documento_id']}")
             if r["bonus"]:
                 st.write("**Sinais estruturais:** " + "; ".join(r["bonus"]))
             for cat, achados in r["categorias"].items():
                 st.markdown(f"**{cat}**")
-                for a in achados:
-                    for tr in a["trechos"]:
-                        st.markdown(f"<div style='margin-left:1em'>p. {tr['pagina']} · peso {a['peso']} · "
-                                    f"{destacar(tr['trecho'].replace(tr['termo'], '«' + tr['termo'] + '»', 1))}</div>",
-                                    unsafe_allow_html=True)
+                for ia, a in enumerate(achados):
+                    for it, tr in enumerate(a["trechos"]):
+                        c_txt, c_bt = st.columns([6, 1])
+                        c_txt.markdown(f"<div style='margin-left:1em'>p. {tr['pagina']} · peso {a['peso']} · "
+                                       f"{destacar(tr['trecho'].replace(tr['termo'], '«' + tr['termo'] + '»', 1))}</div>",
+                                       unsafe_allow_html=True)
+                        with c_bt:
+                            botao_abrir(caso, r["caminho"], tr["pagina"],
+                                        f"tri_{r['documento_id']}_{cat}_{ia}_{it}")
 
 # ------------------------------------------------------------------ 4. busca
 
@@ -223,9 +242,12 @@ with abas[3]:
     if q:
         resultados = buscar(caso, q)
         st.write(f"{len(resultados)} resultado(s){' (limitado a 200)' if len(resultados) == 200 else ''}")
-        for r in resultados:
-            st.markdown(f"**{html.escape(r['localizador'])}, p. {r['pagina']}** — <span style='color:gray'>{html.escape(r['caminho'])}</span>"
-                        f"<br>{destacar(r['trecho'])}", unsafe_allow_html=True)
+        for i, r in enumerate(resultados):
+            c_txt, c_bt = st.columns([6, 1])
+            c_txt.markdown(f"**{html.escape(r['localizador'])}, p. {r['pagina']}** — <span style='color:gray'>{html.escape(r['caminho'])}</span>"
+                           f"<br>{destacar(r['trecho'])}", unsafe_allow_html=True)
+            with c_bt:
+                botao_abrir(caso, r["caminho"], r["pagina"], f"busca_{i}_{r['doc_id']}_{r['pagina']}")
 
 # ------------------------------------------------------------------ 5. documento
 
@@ -262,7 +284,12 @@ with abas[4]:
             info = {"texto_digital": "texto digital", "ocr": "OCR", "html": "HTML", "erro": "falha"}[pg["metodo"]]
             if pg.get("confianca_media") is not None:
                 info += f" · confiança {pg['confianca_media']:.0f}%"
-            st.caption(f"Página {pg['n']} · {info}")
+            c_info, c_bt = st.columns([4, 1])
+            c_info.caption(f"Página {pg['n']} · {info}")
+            with c_bt:
+                botao_abrir(caso, a["caminhos"][0], pg["n"] if a["tipo"] == "pdf" else None,
+                            f"doc_{d['documento_id']}_{pg['n']}",
+                            rotulo=f"📄 Abrir original na p. {pg['n']}" if a["tipo"] == "pdf" else "📄 Abrir original")
             st.text(pg.get("texto") or "(sem texto)")
 
 # ------------------------------------------------------------------ 6. relatório e custódia

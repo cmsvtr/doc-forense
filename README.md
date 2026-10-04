@@ -30,6 +30,7 @@ Linux/macOS: instale o `tesseract` com o idioma `por` pelo gerenciador de pacote
 4. **Triagem:** ranking de documentos para priorizar a leitura, com o motivo de cada ponto (termo, página e trecho).
 5. **Busca:** texto completo em todos os documentos, sem distinção de acentos (`"frase exata"`, `prefix*`, `termo1 OU termo2`).
 6. **Documento:** texto página a página, com o método (digital ou OCR) e a confiança do OCR.
+Nos resultados da Busca, nos trechos da Triagem e na aba Documento, o botão **📄 Abrir p. N** abre o original no Edge (ou no Chrome) já na página citada; sem esses navegadores, abre no leitor de PDF padrão.
 7. **Relatório e custódia:** relatório Word de apoio, verificação de integridade e exportação para a skill `sg-nt:instrucao`.
 
 ## Linha de comando
