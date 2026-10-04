@@ -1,4 +1,4 @@
-"""Interface local (Streamlit) do doc-forense. Inicie com abrir.bat ou: uv run streamlit run app.py"""
+"""Interface local (Streamlit) do Olho Vivo e Faro Fino. Inicie com abrir.bat ou: uv run streamlit run app.py"""
 
 import html
 import os
@@ -18,7 +18,9 @@ from forense.processamento import em_execucao, ler_progresso
 RAIZ = Path(__file__).resolve().parent
 BASE_CASOS = Path(os.environ.get("FORENSE_CASOS", RAIZ / "casos"))
 
-st.set_page_config(page_title="doc-forense", page_icon="🔎", layout="wide")
+NOME_APP = "Olho Vivo e Faro Fino"
+ASSETS = RAIZ / "assets"
+st.set_page_config(page_title=NOME_APP, page_icon=str(ASSETS / "icone.png"), layout="wide")
 
 
 # ------------------------------------------------------------------ dados em cache
@@ -169,12 +171,12 @@ def paginar(itens: list, chave: str, por_pagina: int = 25) -> list:
 
 BASE_CASOS.mkdir(parents=True, exist_ok=True)
 with st.sidebar:
-    st.title("🔎 doc-forense")
+    st.image(str(ASSETS / "logo.svg"), width="stretch")
     st.caption(f"v{__version__} · tudo roda neste computador")
     casos = sorted(p.name for p in BASE_CASOS.iterdir() if (p / "originais").is_dir())
     escolhido = st.selectbox("Caso", casos, index=None if not casos else 0, placeholder="Nenhum caso ainda")
     with st.expander("Novo caso", expanded=not casos):
-        nome_novo = st.text_input("Nome do caso", placeholder="ex.: PA 08700.000000-2026 Obras")
+        nome_novo = st.text_input("Nome do caso", placeholder="ex.: Operação Lote 2")
         if st.button("Criar caso", disabled=not nome_novo.strip()):
             novo = Caso.criar(BASE_CASOS, nome_novo)
             st.success(f"Caso criado: {novo.nome}")
@@ -204,7 +206,13 @@ with st.sidebar:
             st.write(("✅ " if ok else "❌ ") + f"**{nome}**: {detalhe}")
 
 if not escolhido:
-    st.info("Crie um caso na barra lateral para começar.")
+    _, meio, _ = st.columns([1, 3, 1])
+    with meio:
+        st.image(str(ASSETS / "olho_vivo_faro_fino.svg"), width="stretch")
+        st.markdown(f"<h2 style='text-align:center;letter-spacing:.08em'>{NOME_APP.upper()}</h2>"
+                    "<p style='text-align:center;opacity:.75'>Um enxerga o que está no papel. O outro fareja o "
+                    "que está nas entrelinhas.</p>", unsafe_allow_html=True)
+        st.info("Crie um caso na barra lateral para começar.")
     st.stop()
 
 caso = Caso(BASE_CASOS / escolhido)
@@ -463,7 +471,7 @@ with abas[4]:
             st.warning(al)
         if d.get("emails"):
             st.markdown("**Mensagens de e-mail**")
-            st.dataframe(pd.DataFrame(d["emails"]), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame(d["emails"]), hide_index=True, width="stretch")
         ent = d.get("entidades") or {}
         if any(ent.get(k) for k in ("cnpjs", "cpfs", "emails", "valores")):
             with st.expander("Identificadores (CNPJ, CPF, e-mail, valores)"):
@@ -525,7 +533,7 @@ with abas[5]:
             st.subheader("Entre organizações")
             st.dataframe(pd.DataFrame([{"Organizações": " ↔ ".join(o["organizacoes"]), "Mensagens": o["total"],
                                         "Pares de pessoas": o["pares"]} for o in tt["entre_organizacoes"]]),
-                         hide_index=True, use_container_width=True)
+                         hide_index=True, width="stretch")
         st.subheader("Pares que mais se comunicam")
         so_entre = st.toggle("Só entre organizações diferentes", key="so_entre")
         lista_pares = [p for p in tt["pares"] if p["entre_organizacoes"] or not so_entre]
@@ -697,7 +705,7 @@ with abas[6]:
             st.subheader(rotulo)
             st.dataframe(pd.DataFrame([{"Nome": i["nome"], **{c.capitalize(): ", ".join(i[c]) for c in campos},
                                         "Grafias": ", ".join(i["grafias"]), "Documentos": "; ".join(i["documentos"])}
-                                       for i in itens]), hide_index=True, use_container_width=True)
+                                       for i in itens]), hide_index=True, width="stretch")
             with st.expander(f"Trechos de cada {rotulo.lower()[:-1]}"):
                 for i in itens:
                     st.markdown(f"**{html.escape(i['nome'])}**")
@@ -737,7 +745,7 @@ with abas[6]:
                                 "Pessoa": c["pessoa"], "Organização": c["organizacao"] or "—", "Mensagens": c["mensagens"],
                                 "Primeira": c["primeira"][:10], "Última": c["ultima"][:10],
                                 "Entre organizações": "sim" if c["entre_organizacoes"] else ""}
-                                for c in ficha["contrapartes"]]), hide_index=True, use_container_width=True)
+                                for c in ficha["contrapartes"]]), hide_index=True, width="stretch")
                         st.markdown("**Linha do tempo**")
                         if not ficha["linha_do_tempo"]:
                             st.caption("Nenhum evento ou mensagem.")
@@ -820,7 +828,7 @@ with abas[7]:
                 "quando": c["quando"][:16].replace("T", " "), "campo": c["campo"],
                 "antes": _como_texto(c["valor_anterior"]), "proposto": c["valor_proposto"],
                 "conferência da máquina": c["conferencia_maquina"], "motivo": c["motivo"],
-                "onde": c["alvo"].get("localizador", "")} for c in cor[::-1]]), hide_index=True, use_container_width=True)
+                "onde": c["alvo"].get("localizador", "")} for c in cor[::-1]]), hide_index=True, width="stretch")
             st.warning("O log completo contém trechos dos documentos do caso (sigilosos). Só envie a quem estiver "
                        "autorizado a ver os autos.")
             st.download_button("⬇ Baixar log completo (correcoes.jsonl)", caminho_correcoes(caso).read_bytes(),
@@ -831,4 +839,4 @@ with abas[7]:
         if ev:
             st.dataframe(pd.DataFrame([{"quando": e["quando"], "usuário": e["usuario"], "evento": e["evento"],
                                         "detalhes": {k: v for k, v in e.items() if k not in ("quando", "usuario", "evento")}}
-                                       for e in ev]), hide_index=True, use_container_width=True)
+                                       for e in ev]), hide_index=True, width="stretch")

@@ -199,7 +199,7 @@ class Caso:
             "caso": self.nome,
             "gerado_em": agora(),
             "gerado_por": _usuario(),
-            "aplicativo": {"nome": "doc-forense", "versao": __version__, "extrator": EXTRATOR_VERSAO},
+            "aplicativo": {"nome": "Olho Vivo e Faro Fino", "versao": __version__, "extrator": EXTRATOR_VERSAO},
             "sistema": {"so": platform.platform(), "python": platform.python_version()},
             "ferramentas": ferramentas,
             "parametros": parametros,

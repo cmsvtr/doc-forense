@@ -1,4 +1,4 @@
-﻿# Instala a IA local do doc-forense: o Ollama (programa que roda modelos de IA neste computador)
+﻿# Instala a IA local do Olho Vivo e Faro Fino: o Ollama (programa que roda modelos de IA neste computador)
 # e o modelo Qwen 2.5 7B. Nada é enviado para fora: o modelo roda aqui, sem internet.
 # Não precisa de administrador: o Ollama se instala na pasta do usuário.
 # Pode rodar de novo quantas vezes quiser: o que já existe é mantido.

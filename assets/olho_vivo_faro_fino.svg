@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="t">
+  <title id="t">Olho Vivo e Faro Fino</title>
+  <defs>
+    <radialGradient id="luz" cx="50%" cy="20%" r="75%">
+      <stop offset="0" stop-color="#3A414B" stop-opacity=".9"/>
+      <stop offset=".55" stop-color="#1A1E24" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#121519" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="casaco" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B434E"/><stop offset="1" stop-color="#232930"/>
+    </linearGradient>
+    <linearGradient id="pelo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5A626D"/><stop offset="1" stop-color="#2E343C"/>
+    </linearGradient>
+    <filter id="difuso" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
+  </defs>
+
+  <rect width="640" height="400" fill="#121519"/>
+  <!-- cone de luz do poste -->
+  <path d="M320 -20 L130 400 L510 400 Z" fill="url(#luz)" filter="url(#difuso)" opacity=".85"/>
+  <ellipse cx="320" cy="352" rx="230" ry="18" fill="#0B0D10" opacity=".8"/>
+
+  <!-- rastro: pegadas que somem ao fundo -->
+  <g fill="#C9A85C">
+    <circle cx="560" cy="350" r="3.2" opacity=".55"/><circle cx="588" cy="342" r="2.6" opacity=".4"/>
+    <circle cx="612" cy="352" r="2.1" opacity=".28"/><circle cx="632" cy="344" r="1.6" opacity=".18"/>
+  </g>
+
+  <!-- OLHO VIVO: silhueta alta, casaco em trapézio, a cabeça é um olho sob o chapéu -->
+  <g>
+    <path d="M196 352 L222 168 L298 168 L324 352 Z" fill="url(#casaco)"/>
+    <path d="M222 168 L260 236 L298 168" fill="none" stroke="#14171C" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M260 236 L260 352" stroke="#14171C" stroke-width="3"/>
+    <rect x="236" y="262" width="48" height="6" fill="#14171C"/>
+    <!-- o olho -->
+    <path d="M208 132 Q260 86 312 132 Q260 178 208 132 Z" fill="#E6E0D2"/>
+    <circle cx="268" cy="132" r="21" fill="#C9A85C"/>
+    <circle cx="268" cy="132" r="10" fill="#0B0D10"/>
+    <circle cx="274" cy="126" r="3.5" fill="#E6E0D2"/>
+    <!-- chapéu -->
+    <rect x="198" y="96" width="124" height="9" rx="4" fill="#0B0D10"/>
+    <path d="M226 98 L232 58 Q260 48 288 58 L294 98 Z" fill="#0B0D10"/>
+    <rect x="230" y="84" width="60" height="7" fill="#8E2B2B"/>
+  </g>
+
+  <!-- FARO FINO: silhueta baixa e horizontal, cabeça em cunha apontando o rastro -->
+  <g>
+    <path d="M352 352 L362 262 Q366 236 392 232 L438 232 Q456 234 458 256 L462 352 Z" fill="url(#casaco)"/>
+    <!-- cabeça-focinho -->
+    <path d="M388 236 Q392 196 428 190 L506 214 Q520 220 506 230 L436 252 Q400 258 388 236 Z" fill="url(#pelo)"/>
+    <!-- orelha caída -->
+    <path d="M404 204 Q384 214 388 262 Q404 254 418 216 Z" fill="#1E2329"/>
+    <!-- olho semicerrado, concentrado -->
+    <path d="M440 210 Q450 204 460 210" fill="none" stroke="#E6E0D2" stroke-width="3" stroke-linecap="round"/>
+    <!-- nariz -->
+    <circle cx="510" cy="221" r="7" fill="#0B0D10"/>
+    <!-- chapéu de caçador, com a fita vermelha -->
+    <path d="M400 196 Q414 160 446 168 Q456 182 452 198 Z" fill="#0B0D10"/>
+    <rect x="404" y="186" width="46" height="6" transform="rotate(-6 427 189)" fill="#8E2B2B"/>
+    <!-- o faro: ondas de cheiro -->
+    <g fill="none" stroke="#C9A85C" stroke-linecap="round" stroke-width="3">
+      <path d="M526 212 Q536 221 526 230" opacity=".9"/>
+      <path d="M540 202 Q556 221 540 240" opacity=".6"/>
+      <path d="M554 192 Q576 221 554 250" opacity=".35"/>
+    </g>
+  </g>
+
+  <!-- linha de visão do olho cruzando com o faro -->
+  <path d="M312 132 Q420 120 520 200" fill="none" stroke="#E6E0D2" stroke-width="1.5" stroke-dasharray="2 7" opacity=".45"/>
+</svg>

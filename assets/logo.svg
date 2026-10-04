@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 64">
+  <path d="M4 32 Q24 12 44 32 Q24 52 4 32 Z" fill="#E6E0D2"/>
+  <circle cx="26" cy="32" r="9" fill="#C9A85C"/>
+  <circle cx="26" cy="32" r="4.3" fill="#0B0D10"/>
+  <rect x="6" y="16" width="40" height="4" rx="2" fill="#8E2B2B"/>
+  <g fill="none" stroke="#C9A85C" stroke-width="3" stroke-linecap="round">
+    <path d="M48 26 Q53 32 48 38"/><path d="M54 21 Q61 32 54 43" opacity=".55"/>
+  </g>
+  <text x="72" y="29" font-family="Georgia, 'Times New Roman', serif" font-size="19" letter-spacing="1.5" fill="#E6E0D2">OLHO VIVO</text>
+  <text x="72" y="52" font-family="Georgia, 'Times New Roman', serif" font-size="19" letter-spacing="1.5" fill="#C9A85C">&amp; FARO FINO</text>
+</svg>

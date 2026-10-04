@@ -15,25 +15,27 @@ serverAddress = "localhost"
 toolbarMode = "minimal"
 
 [theme]
-# Paleta do Padrão Digital de Governo (gov.br), a mesma do portal do Cade. Sem fontes da internet:
-# o app roda sem rede, então fica a fonte embutida do Streamlit.
-base = "light"
-primaryColor = "#1351B4"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F0F4FA"
-textColor = "#1B1B1B"
-linkColor = "#1351B4"
-borderColor = "#D0D7E2"
+# Clima de filme de espionagem: grafite, papel envelhecido, latão e um vermelho discreto.
+# Sem fontes nem recursos da internet: o app roda offline.
+base = "dark"
+primaryColor = "#9B2F2F"
+backgroundColor = "#121519"
+secondaryBackgroundColor = "#1C2128"
+textColor = "#E6E0D2"
+linkColor = "#C9A85C"
+borderColor = "#2E353F"
 showWidgetBorder = true
 baseRadius = "small"
-redColor = "#E52207"
-greenColor = "#168821"
-yellowColor = "#B38C00"
-blueColor = "#1351B4"
+redColor = "#C0574F"
+greenColor = "#7FA678"
+yellowColor = "#C9A85C"
+blueColor = "#8AA0BA"
+orangeColor = "#C98A4E"
+violetColor = "#9A8FB5"
+grayColor = "#8A94A3"
 
 [theme.sidebar]
-backgroundColor = "#071D41"
-secondaryBackgroundColor = "#0C326F"
-textColor = "#FFFFFF"
-primaryColor = "#5992ED"
-borderColor = "#2A4A7F"
+backgroundColor = "#0B0D10"
+secondaryBackgroundColor = "#161A20"
+textColor = "#D8D2C4"
+borderColor = "#262C34"

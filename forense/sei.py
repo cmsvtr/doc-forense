@@ -3,7 +3,7 @@
 Regras herdadas da skill sg-nt:instrucao (lições de casos reais):
 - o número SEI está no nome do arquivo («[588]-1215707_E_mail.pdf»: ordem 588, SEI 1215707);
 - o arquivo de pasta de anexo extraída herda o SEI da pasta («[104]-1157123_Anexo/Ata.pdf»);
-- o documento de dentro pode ter outro SEI, no cabeçalho («SEI/CADE - 1197874 - Nota Técnica»);
+- o documento de dentro pode ter outro SEI, no cabeçalho («SEI/<ÓRGÃO> - 1197874 - Nota Técnica»);
 - o tipo no nome só é confiável no HTML, que nasce no SEI. No PDF é o tipo que quem protocolou
   escolheu: defesa protocolada como «E-mail» é comum.
 """

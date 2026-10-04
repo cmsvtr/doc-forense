@@ -151,7 +151,7 @@ _FECHO_CARTA = re.compile(r"\b(atenciosamente|cordialmente|respeitosamente|sauda
 
 
 def tipo_comunicacao(doc: dict) -> str | None:
-    """Tipo de comunicação entre pessoas, ou None. Ofício do próprio Cade (ato do SEI) não conta: é
+    """Tipo de comunicação entre pessoas, ou None. Ofício da própria autoridade (ato do SEI) não conta: é
     expediente do processo, não prova."""
     from .comunicacoes import mensagens_de_chat
 

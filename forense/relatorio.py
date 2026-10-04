@@ -395,7 +395,7 @@ def _anexo_metodo(doc, manifesto, triagem):
         f = manifesto.get("ferramentas", {})
         p = manifesto.get("parametros", {})
         for item in [
-            f"Aplicativo doc-forense {manifesto['aplicativo']['versao']} (extrator {manifesto['aplicativo']['extrator']})",
+            f"Aplicativo Olho Vivo e Faro Fino {manifesto['aplicativo']['versao']} (extrator {manifesto['aplicativo']['extrator']})",
             f"Sistema: {manifesto['sistema']['so']}, Python {manifesto['sistema']['python']}",
             f"OCR: {f.get('tesseract') or 'indisponível'}; idioma {f.get('idioma', p.get('idioma'))}; "
             f"modelo {Path(f.get('traineddata', '')).name or '-'} (SHA-256 {f.get('traineddata_sha256', '-')})",
@@ -437,7 +437,7 @@ def gerar_relatorio(caso: Caso) -> Path:
 
     titulo = doc.add_heading("Relatório de apoio ao analista", level=0)
     titulo.runs[0].font.color.rgb = RGBColor(0x1F, 0x38, 0x64)
-    doc.add_paragraph(f"Caso: {caso.nome}  ·  Gerado em {agora()}  ·  doc-forense {__version__}")
+    doc.add_paragraph(f"Caso: {caso.nome}  ·  Gerado em {agora()}  ·  Olho Vivo e Faro Fino {__version__}")
     _aviso(doc,
            "DOCUMENTO DE TRABALHO INTERNO. Organiza o material para orientar a leitura e a redação da nota técnica. "
            "Não é prova nem conclusão. Todo trecho deve ser conferido no documento original (arquivo e página indicados), "

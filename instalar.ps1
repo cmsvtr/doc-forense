@@ -1,4 +1,4 @@
-﻿# Instalador do doc-forense para Windows 10/11.
+﻿# Instalador do Olho Vivo e Faro Fino para Windows 10/11.
 # Rode clicando duas vezes em instalar.bat (ele chama este arquivo).
 # O que faz, nesta ordem (pode rodar de novo quantas vezes quiser: o que já existe é mantido):
 #   1. instala o uv (gerenciador de Python), sem precisar de administrador
@@ -76,21 +76,21 @@ uv run --no-dev python -m forense diagnostico
 $ok = ($LASTEXITCODE -eq 0)
 
 try {
-    $atalho = Join-Path ([Environment]::GetFolderPath("Desktop")) "doc-forense.lnk"
+    $atalho = Join-Path ([Environment]::GetFolderPath("Desktop")) "Olho Vivo e Faro Fino.lnk"
     $ws = New-Object -ComObject WScript.Shell
     $s = $ws.CreateShortcut($atalho)
     $s.TargetPath = Join-Path $App "abrir.bat"
     $s.WorkingDirectory = $App
-    $s.Description = "doc-forense: catálogo e triagem de documentos"
+    $s.Description = "Olho Vivo e Faro Fino: catálogo e triagem de documentos"
     $s.Save()
-    Write-Host "Atalho criado na área de trabalho: doc-forense"
+    Write-Host "Atalho criado na área de trabalho: Olho Vivo e Faro Fino"
 } catch {
     Write-Warning "Não consegui criar o atalho; use o abrir.bat."
 }
 
 Write-Host ""
 if ($ok) {
-    Write-Host "Instalação concluída. Para usar: clique duas vezes em 'doc-forense' na área de trabalho." -ForegroundColor Green
+    Write-Host "Instalação concluída. Para usar: clique duas vezes em 'Olho Vivo e Faro Fino' na área de trabalho." -ForegroundColor Green
 } else {
     Write-Host "A instalação terminou com pendências (veja as linhas FALHA acima)." -ForegroundColor Yellow
     Write-Host "Se o Tesseract acabou de ser instalado, feche esta janela e rode o instalador de novo."

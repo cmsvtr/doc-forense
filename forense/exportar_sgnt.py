@@ -116,7 +116,7 @@ def exportar(caso: Caso) -> dict:
                 f.write("%s\t%s\t%d\t%.0f\t%d\n" % (nome, cam, pg, conf, npal))
 
     (saida / "LEIA-ME.txt").write_text(
-        f"Corpus exportado pelo doc-forense em {agora()} (caso {caso.nome}).\n\n"
+        f"Corpus exportado pelo Olho Vivo e Faro Fino em {agora()} (caso {caso.nome}).\n\n"
         "Para a skill sg-nt:instrucao (Fase 3), sem refazer o OCR:\n"
         "  1. copie a pasta _caixas para <pasta do caso>/instrucao/corpus/\n"
         "  2. rode: python build_corpus.py <processo> <apartado> --out instrucao/corpus --sem-ocr\n"

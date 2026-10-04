@@ -1,6 +1,8 @@
-# doc-forense
+# Olho Vivo e Faro Fino
 
-Aplicativo local para organizar documentos de investigação de cartéis: recebe PDFs e HTMLs, faz OCR em português, cataloga, indexa para busca, prioriza a leitura e gera um relatório Word de apoio ao analista. **Tudo roda no computador do usuário**: nenhum documento sai da máquina.
+<p align="center"><img src="assets/olho_vivo_faro_fino.svg" alt="Olho Vivo e Faro Fino" width="480"></p>
+
+Um enxerga o que está no papel; o outro fareja o que está nas entrelinhas. Aplicativo local para organizar documentos de investigação de cartéis: recebe PDFs e HTMLs, faz OCR em português, cataloga, indexa para busca, prioriza a leitura e gera um relatório Word de apoio ao analista. **Tudo roda no computador do usuário**: nenhum documento sai da máquina.
 
 > **Etapa 1 (esta versão):** extração, OCR, catálogo, busca, triagem, cadeia de custódia e relatório, **sem IA**.
 > **Etapa 2 (planejada):** IA local para dramatis personae, linha do tempo e síntese, com citação conferida e revisão humana.
@@ -13,12 +15,12 @@ Aplicativo local para organizar documentos de investigação de cartéis: recebe
    - instala o Tesseract OCR pelo winget (o Windows pede permissão de administrador uma vez);
    - baixa o português do OCR para a pasta `tessdata` do aplicativo;
    - instala as bibliotecas e confere tudo;
-   - cria o atalho **doc-forense** na área de trabalho.
+   - cria o atalho **Olho Vivo e Faro Fino** na área de trabalho.
 3. Se o diagnóstico final mostrar `FALHA` no Tesseract logo depois de instalá-lo, feche a janela e rode o `instalar.bat` de novo.
 
 Para atualizar: feche o aplicativo e clique duas vezes em **`atualizar.bat`**. Ele baixa a versão nova e troca só o código; os casos, o Python instalado e o idioma do OCR ficam como estão.
 
-Para usar: clique no atalho **doc-forense** (ou em `abrir.bat`). O navegador abre o aplicativo em `http://localhost:8501`. A janela preta precisa ficar aberta enquanto você usa.
+Para usar: clique no atalho **Olho Vivo e Faro Fino** (ou em `abrir.bat`). O navegador abre o aplicativo em `http://localhost:8501`. A janela preta precisa ficar aberta enquanto você usa.
 
 Linux/macOS: instale o `tesseract` com o idioma `por` pelo gerenciador de pacotes e rode `uv sync --no-dev` e depois `uv run --no-dev streamlit run app.py`.
 
@@ -34,7 +36,7 @@ A Etapa 2 usa uma IA que roda **neste computador** (Ollama com o modelo Qwen 2.5
 1. Baixe e instale o Ollama: https://ollama.com/download (botão *Download for Windows*). Não precisa entrar com conta.
 2. Depois de instalado, ele fica ativo em segundo plano (ícone perto do relógio).
 3. Abra o *Prompt de Comando* e rode `ollama pull qwen2.5:7b` (download de cerca de 4,7 GB; se cair, rode de novo e ele continua).
-4. Na pasta do doc-forense, rode `uv run --no-dev python -m forense ia` para conferir e medir a velocidade.
+4. Na pasta do aplicativo, rode `uv run --no-dev python -m forense ia` para conferir e medir a velocidade.
 
 **Sigilo:** use só modelos que rodam no computador. Modelos com `cloud` no nome rodam nos servidores da Ollama; o `python -m forense ia` avisa se houver algum. Não defina a variável `OLLAMA_HOST`: sem ela, o Ollama só aceita conexões deste computador.
 
@@ -105,7 +107,7 @@ O botão "Exportar corpus sg-nt" (ou `exportar-sgnt`) grava, em `exportacao_sgnt
 
 Copie `_caixas` para `instrucao/corpus/` e rode o `build_corpus.py` com `--sem-ocr`: a skill reaproveita o OCR feito aqui (horas de processamento) em vez de refazê-lo.
 
-Use a **sg-nt 0.2.2 ou mais nova**. Até a 0.2.1, o `build_corpus.py` tratava como digital a página escaneada com o carimbo do SEI e ignorava o OCR dela: o corpus ficava só com o carimbo, com cobertura de 100%. A 0.2.2 aplica a mesma regra do doc-forense (imagem em metade da página ou mais e menos de 1.500 caracteres nativos vão ao OCR). Testado com o `build_corpus.py` da 0.2.2, inclusive com `--sem-ocr` sobre as caixas exportadas daqui.
+Use a **sg-nt 0.2.2 ou mais nova**. Até a 0.2.1, o `build_corpus.py` tratava como digital a página escaneada com o carimbo do SEI e ignorava o OCR dela: o corpus ficava só com o carimbo, com cobertura de 100%. A 0.2.2 aplica a mesma regra deste aplicativo (imagem em metade da página ou mais e menos de 1.500 caracteres nativos vão ao OCR). Testado com o `build_corpus.py` da 0.2.2, inclusive com `--sem-ocr` sobre as caixas exportadas daqui.
 
 ## Limitações conhecidas
 

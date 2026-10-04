@@ -1,4 +1,4 @@
-"""doc-forense: catálogo, OCR e triagem local de documentos para investigação de cartéis."""
+"""Olho Vivo e Faro Fino (pacote forense): catálogo, OCR e triagem local de documentos para investigação de cartéis."""
 
 __version__ = "0.1.0"
 

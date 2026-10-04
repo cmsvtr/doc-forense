@@ -21,7 +21,7 @@ def main(argv=None) -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-    ap = argparse.ArgumentParser(prog="python -m forense", description="doc-forense")
+    ap = argparse.ArgumentParser(prog="python -m forense", description="Olho Vivo e Faro Fino")
     sub = ap.add_subparsers(dest="comando", required=True)
     sub.add_parser("diagnostico")
     pia = sub.add_parser("ia")

@@ -1,6 +1,6 @@
-﻿# Atualiza o doc-forense com a versão mais recente do GitHub.
+﻿# Atualiza o Olho Vivo e Faro Fino com a versão mais recente do GitHub.
 # Troca só o código: a pasta casos (os seus documentos e resultados), o Python instalado (.venv)
-# e o idioma do OCR (tessdata) ficam como estão. Feche o doc-forense antes de atualizar.
+# e o idioma do OCR (tessdata) ficam como estão. Feche o Olho Vivo e Faro Fino antes de atualizar.
 
 $ErrorActionPreference = "Stop"
 $Ramo = "claude/prompt-forense-analysis-3qt99j"
@@ -29,7 +29,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Falha ao atualizar as bibliotecas (uv sync)." }
     uv run --no-dev python -m forense diagnostico
     Write-Host ""
-    Write-Host "Atualizado. Abra o doc-forense de novo; para continuar um processamento, clique em Processar." -ForegroundColor Green
+    Write-Host "Atualizado. Abra o Olho Vivo e Faro Fino de novo; para continuar um processamento, clique em Processar." -ForegroundColor Green
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
