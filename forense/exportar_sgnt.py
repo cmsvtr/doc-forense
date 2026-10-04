@@ -75,7 +75,7 @@ def exportar(caso: Caso) -> dict:
         origem_caixas = caso.extraido / "caixas" / doc["documento_id"]
         com_texto = ocr = invisiveis = 0
         for pg in doc["paginas"]:
-            if pg["metodo"] in ("texto_digital", "html"):
+            if pg["metodo"] in ("texto_digital", "html", "texto"):
                 com_texto += 1
             elif pg["metodo"] == "ocr" and pg.get("caracteres"):
                 ocr += 1

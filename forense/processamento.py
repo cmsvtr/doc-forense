@@ -155,6 +155,9 @@ def processar_documento(caminho: str, sha256: str, caminhos_rel: list[str], para
             raise RuntimeError("o arquivo mudou durante o processamento (hash diferente)")
         if doc["arquivo"]["tipo"] == "html":
             resultado = extrair_html(p, parametros)
+        elif doc["arquivo"]["tipo"] == "txt":
+            from .extrator_txt import extrair_txt
+            resultado = extrair_txt(p, parametros)
         else:
             dir_caixas = Path(destino).parent / "caixas" / sha256[:16]
             shutil.rmtree(dir_caixas, ignore_errors=True)  # reextração: caixas antigas saem
@@ -303,7 +306,7 @@ def _executar_extracao(caso: Caso, pendentes: list, parametros: dict, workers: i
         ativos: dict = {}
         estado: dict = {}  # destino -> {"doc", "args", "inicio", "faltam", "total_ocr", "feitas"}
         for args in pendentes:
-            tarefa = processar_documento if Path(args[0]).suffix.lower() in (".html", ".htm") else preparar_pdf
+            tarefa = preparar_pdf if Path(args[0]).suffix.lower() == ".pdf" else processar_documento
             ativos[pool.submit(tarefa, *args)] = (tarefa.__name__, args)
             estado[args[4]] = {"inicio": time.monotonic(), "args": args}
 

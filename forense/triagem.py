@@ -9,7 +9,7 @@ import re
 
 from . import termos_cartel as T
 from .caso import Caso, agora, escrever_json_atomico, ler_json
-from .nomes import contar_empresas, e_contrato, emails_do_documento, empresas, pessoas
+from .nomes import contar_empresas, e_contrato, emails_do_documento, empresas, pessoas, tipo_comunicacao
 from .sei import localizador
 from .texto import normalizar, trecho
 
@@ -68,7 +68,11 @@ def triar_documento(doc: dict, trechos_por_termo: int = 2) -> dict:
     motivos = []
     if T.PRIORIZAR_EMAILS and msgs:
         motivos.append(f"e-mail ({len(msgs)} mensagem(ns))")
-    if T.PRIORIZAR_CONTRATOS and e_contrato(doc):
+    comunicacao = tipo_comunicacao(doc)
+    if T.PRIORIZAR_COMUNICACOES and comunicacao and comunicacao != "e-mail":
+        motivos.append(f"comunicação ({comunicacao})")
+    contrato = e_contrato(doc)
+    if T.PRIORIZAR_CONTRATOS and contrato:
         motivos.append("contrato")
     n_empresas = contar_empresas(set(lista_empresas))
     if n_empresas >= T.PRIORIDADE_MIN_EMPRESAS:
@@ -77,6 +81,8 @@ def triar_documento(doc: dict, trechos_por_termo: int = 2) -> dict:
         motivos.append(f"{len(lista_pessoas)} pessoas")
     return {
         "prioritario": bool(motivos),
+        "tipo_comunicacao": comunicacao,
+        "contrato": contrato,
         "motivos_prioridade": motivos,
         "empresas_citadas": lista_empresas[:30],
         "pessoas_citadas": lista_pessoas[:30],
@@ -102,7 +108,7 @@ def triar_caso(caso: Caso) -> dict:
         "schema": "doc-forense/triagem@1",
         "gerado_em": agora(),
         "termos_hash": hash_termos(),
-        "aviso": "Ordem para priorizar a leitura: primeiro e-mails, contratos e documentos com 2+ empresas ou "
+        "aviso": "Ordem para priorizar a leitura: primeiro e-mails e outras comunicações, contratos e documentos com 2+ empresas ou "
                  "2+ pessoas; depois os demais; em cada grupo, pela pontuação de termos. Não indica nem comprova conduta.",
         "documentos": resultados,
     }

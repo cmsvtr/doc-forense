@@ -203,7 +203,7 @@ def test_relatorio_traz_so_os_validados(caso, ollama):
     marcar(caso, evento["id"], "validado")
     texto = "\n".join(p.text for p in Document(gerar_relatorio(caso)).paragraphs)
     assert "Dramatis personae (validado pelo analista)" in texto and "Carlos Mendes" in texto
-    assert "Engenharia Alfa" not in texto.split("6. Dramatis")[1].split("7. Linha")[0]   # pendente: fora
+    assert "Engenharia Alfa" not in texto.split("7. Dramatis")[1].split("8. Linha")[0]   # pendente: fora
 
 
 def test_resposta_cortada_vira_erro_explicado(caso, ollama):

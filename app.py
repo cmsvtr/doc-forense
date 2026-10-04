@@ -146,7 +146,7 @@ rodando = em_execucao(caso)
 
 st.header(caso.nome)
 abas = st.tabs(["1 · Entrada", "2 · Processar", "3 · Triagem", "4 · Busca e perguntas", "5 · Documento",
-                "6 · IA e revisão", "7 · Relatório e custódia"])
+                "6 · Comunicações", "7 · IA e revisão", "8 · Relatório e custódia"])
 
 # ------------------------------------------------------------------ 1. entrada
 
@@ -406,7 +406,10 @@ with abas[4]:
         n = st.number_input("Página", 1, max(len(d["paginas"]), 1), 1) if len(d["paginas"]) > 1 else 1
         if d["paginas"]:
             pg = d["paginas"][n - 1]
-            info = {"texto_digital": "texto digital", "ocr": "OCR", "html": "HTML", "erro": "falha"}[pg["metodo"]]
+            info = {"texto_digital": "texto digital", "ocr": "OCR", "html": "HTML", "texto": "texto",
+                    "erro": "falha"}.get(pg["metodo"], pg["metodo"])
+            if pg.get("linhas"):
+                info += f" · linhas {pg['linhas'][0]}–{pg['linhas'][1]}"
             if pg.get("confianca_media") is not None:
                 info += f" · confiança {pg['confianca_media']:.0f}%"
             c_info, c_bt = st.columns([4, 1])
@@ -416,6 +419,65 @@ with abas[4]:
                             f"doc_{d['documento_id']}_{pg['n']}",
                             rotulo=f"📄 Abrir original na p. {pg['n']}" if a["tipo"] == "pdf" else "📄 Abrir original")
             st.text(pg.get("texto") or "(sem texto)")
+
+# ------------------------------------------------------------------ 6. comunicações
+
+@st.cache_data
+def teia(raiz: str, versao: float) -> dict:
+    from forense.comunicacoes import construir_teia
+    return construir_teia(Caso(Path(raiz)))
+
+
+with abas[5]:
+    from forense.comunicacoes import grafo_dot
+
+    tt = teia(str(caso.raiz), marca)
+    st.caption("Montada pela máquina, sem IA, a partir dos cabeçalhos de e-mail (De → Para e Cc) e das conversas "
+               "exportadas do WhatsApp (.txt). A pessoa é identificada pelo endereço de e-mail quando há; linhas "
+               "vermelhas ligam organizações diferentes (domínios de e-mail distintos).")
+    if not tt["pares"]:
+        st.info("Nenhuma comunicação estruturada encontrada (cabeçalhos de e-mail ou conversas exportadas).")
+    else:
+        n_entre = sum(1 for p in tt["pares"] if p["entre_organizacoes"])
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Mensagens", tt["mensagens"])
+        c2.metric("Pares de pessoas", len(tt["pares"]))
+        c3.metric("Pares entre organizações", n_entre)
+        maximo = st.slider("Pares no gráfico", 5, max(5, min(80, len(tt["pares"]))), min(25, len(tt["pares"])))
+        try:
+            n_pessoas = len({x for p in tt["pares"][:maximo] for x in (p["a"], p["b"])})
+            st.graphviz_chart(grafo_dot(tt, maximo), use_container_width=n_pessoas > 8)
+        except Exception as e:  # o gráfico é acessório; a tabela abaixo tem tudo
+            st.caption(f"Gráfico indisponível ({e}).")
+        if tt["entre_organizacoes"]:
+            st.subheader("Entre organizações")
+            st.dataframe(pd.DataFrame([{"Organizações": " ↔ ".join(o["organizacoes"]), "Mensagens": o["total"],
+                                        "Pares de pessoas": o["pares"]} for o in tt["entre_organizacoes"]]),
+                         hide_index=True, use_container_width=True)
+        st.subheader("Pares que mais se comunicam")
+        so_entre = st.toggle("Só entre organizações diferentes", key="so_entre")
+        lista_pares = [p for p in tt["pares"] if p["entre_organizacoes"] or not so_entre]
+        st.dataframe(pd.DataFrame([{
+            "Pessoa A": p["rotulo_a"] + (f" ({p['organizacao_a']})" if p["organizacao_a"] else ""),
+            "Pessoa B": p["rotulo_b"] + (f" ({p['organizacao_b']})" if p["organizacao_b"] else ""),
+            "Mensagens": p["total"], "Em cópia": p["em_copia"],
+            "Primeira": p["primeira"][:10], "Última": p["ultima"][:10],
+            "Documentos": len(p["documentos"]),
+        } for p in lista_pares]), hide_index=True, use_container_width=True, height=300)
+        rotulos_par = {f"{p['rotulo_a']} ↔ {p['rotulo_b']} ({p['total']})": p for p in lista_pares}
+        if rotulos_par:
+            esc_par = rotulos_par[st.selectbox("Ver as mensagens de um par", list(rotulos_par))]
+            for k, m in enumerate(esc_par["mensagens"][:200]):
+                de_ = tt["pessoas"][m["de"]]["rotulo"]
+                para_ = tt["pessoas"][m["para"]]["rotulo"]
+                c_txt, c_bt = st.columns([6, 1])
+                c_txt.markdown(f"**{html.escape((m['data'] or 'sem data').replace('T', ' '))}** · {m['meio']} · "
+                               f"{html.escape(de_)} → {html.escape(para_)}{' (cópia)' if m['copia'] else ''}"
+                               + (f" · «{html.escape(m['assunto'])}»" if m["assunto"] else "")
+                               + f"<br><span style='color:gray'>{html.escape(m['localizador'])}</span>",
+                               unsafe_allow_html=True)
+                with c_bt:
+                    botao_abrir(caso, m["caminho"], m["pagina"], f"com_{k}_{hash(m['localizador'])}")
 
 # ------------------------------------------------------------------ 6. IA e revisão
 
@@ -445,7 +507,7 @@ def resumo_achado(a: dict) -> str:
     return f"{d.get('data') or 'sem data'} · {d['categoria']}"
 
 
-with abas[5]:
+with abas[6]:
     from forense.analise_ia import PALAVRAS_POR_TRECHO, marcar
     from forense.consolidacao import dramatis_personae, linha_do_tempo
 
@@ -469,9 +531,20 @@ with abas[5]:
         if not ordem:
             st.info("Processe os documentos primeiro.")
         else:
-            modo = st.radio("Quais documentos", ["Os primeiros da triagem", "Escolher documentos"], horizontal=True)
+            comunic = [r for r in ordem if r.get("tipo_comunicacao") or r.get("contrato")]
+            modo = st.radio("Quais documentos", [f"Comunicações e contratos ({len(comunic)})",
+                                                  "Os primeiros da triagem", "Escolher documentos"], horizontal=True)
             argumentos = ["analisar-ia", str(caso.raiz)]
-            if modo == "Os primeiros da triagem":
+            if modo.startswith("Comunicações"):
+                escolhidos = comunic
+                argumentos += ["--documentos", ",".join(r["documento_id"] for r in escolhidos)]
+                if comunic:
+                    tipos = {}
+                    for r in comunic:
+                        t_ = r.get("tipo_comunicacao") or "contrato"
+                        tipos[t_] = tipos.get(t_, 0) + 1
+                    st.caption("Inclui: " + ", ".join(f"{v} {k}" for k, v in sorted(tipos.items(), key=lambda x: -x[1])))
+            elif modo == "Os primeiros da triagem":
                 n = st.number_input("Quantos", 1, len(ordem), min(10, len(ordem)))
                 argumentos += ["--primeiros", str(n)]
                 escolhidos = ordem[:n]
@@ -580,9 +653,9 @@ with abas[5]:
                 st.markdown(f"«{html.escape(' '.join(e['trecho'].split()))}» "
                             f"<span style='color:gray'>— {html.escape(e['localizador'])}</span>", unsafe_allow_html=True)
 
-# ------------------------------------------------------------------ 7. relatório e custódia
+# ------------------------------------------------------------------ 8. relatório e custódia
 
-with abas[6]:
+with abas[7]:
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Relatório de apoio (Word)")

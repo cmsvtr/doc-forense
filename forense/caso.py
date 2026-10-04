@@ -23,7 +23,7 @@ from pathlib import Path
 from . import EXTRATOR_VERSAO, __version__
 from .ocr import sha256_arquivo
 
-EXTENSOES = {".pdf": "pdf", ".html": "html", ".htm": "html"}
+EXTENSOES = {".pdf": "pdf", ".html": "html", ".htm": "html", ".txt": "txt"}
 
 
 def agora() -> str:

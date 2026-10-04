@@ -297,6 +297,34 @@ def _entidades(doc, docs):
                 [4.5, 1.5, 11])
 
 
+def _comunicacoes(doc, caso: Caso):
+    from .comunicacoes import construir_teia
+
+    t = construir_teia(caso)
+    if not t["pares"]:
+        return
+    doc.add_heading("6. Comunicações entre pessoas (sem IA)", level=1)
+    doc.add_paragraph(
+        f"A partir de cabeçalhos de e-mail (De → Para e Cc) e de conversas exportadas: {t['mensagens']} mensagem(ns), "
+        f"{len(t['pares'])} par(es) de pessoas. A pessoa é identificada pelo endereço de e-mail quando há; "
+        "organização é o domínio do e-mail. Confira cada par nos documentos indicados.")
+    if t["entre_organizacoes"]:
+        doc.add_heading("6.1 Entre organizações diferentes", level=2)
+        _tabela(doc, ["Organizações", "Mensagens", "Pares de pessoas"],
+                [[" ↔ ".join(o["organizacoes"]), o["total"], o["pares"]] for o in t["entre_organizacoes"][:30]],
+                [9, 3, 3])
+    doc.add_heading("6.2 Pares que mais se comunicam", level=2)
+    linhas = []
+    for p in t["pares"][:40]:
+        primeira = p["mensagens"][0]
+        linhas.append([p["rotulo_a"] + (f" ({p['organizacao_a']})" if p["organizacao_a"] else ""),
+                       p["rotulo_b"] + (f" ({p['organizacao_b']})" if p["organizacao_b"] else ""),
+                       p["total"], f"{p['primeira'][:10]} a {p['ultima'][:10]}".strip(" a"),
+                       Link("; ".join(p["documentos"][:3]) + (" …" if len(p["documentos"]) > 3 else ""),
+                            _alvo(caso, primeira["caminho"]))])
+    _tabela(doc, ["Pessoa A", "Pessoa B", "Mensagens", "Período", "Documentos"], linhas, [4, 4, 1.8, 3, 4.2])
+
+
 def _validados(doc, caso: Caso):
     """Seções da etapa 2: só o que o analista validou."""
     from .analise_ia import achados_do_caso
@@ -307,13 +335,13 @@ def _validados(doc, caso: Caso):
         return
     n_val = sum(1 for a in achados if a["revisao"]["status"] == "validado")
     n_pend = sum(1 for a in achados if a["revisao"]["status"] == "pendente")
-    doc.add_heading("6. Dramatis personae (validado pelo analista)", level=1)
+    doc.add_heading("7. Dramatis personae (validado pelo analista)", level=1)
     doc.add_paragraph(
         f"Proposto pela IA local, conferido pela máquina (cada trecho existe no documento) e validado pelo analista. "
         f"{n_val} achado(s) validado(s); {n_pend} ainda pendente(s), fora deste relatório.")
     dp = dramatis_personae(achados)
-    for rotulo, itens, campos in (("6.1 Pessoas", dp["pessoas"], ("cargos", "empresas")),
-                                  ("6.2 Empresas", dp["empresas"], ("cnpjs",))):
+    for rotulo, itens, campos in (("7.1 Pessoas", dp["pessoas"], ("cargos", "empresas")),
+                                  ("7.2 Empresas", dp["empresas"], ("cnpjs",))):
         doc.add_heading(rotulo, level=2)
         if not itens:
             doc.add_paragraph("Nenhum item validado.")
@@ -329,7 +357,7 @@ def _validados(doc, caso: Caso):
                 _link(q, f["localizador"], _alvo(caso, f["caminho"]), negrito=True)
                 q.add_run(": «" + " ".join(f["trecho"].split()) + "»")
 
-    doc.add_heading("7. Linha do tempo (validada pelo analista)", level=1)
+    doc.add_heading("8. Linha do tempo (validada pelo analista)", level=1)
     lt = linha_do_tempo(achados)
     if not lt:
         doc.add_paragraph("Nenhum evento validado.")
@@ -425,6 +453,7 @@ def gerar_relatorio(caso: Caso) -> Path:
     _qualidade(doc, docs, manifesto)
     _linha_do_tempo(doc, docs, caso)
     _entidades(doc, docs)
+    _comunicacoes(doc, caso)
     _validados(doc, caso)
     _anexo_custodia(doc, docs, caso, manifesto)
     _anexo_metodo(doc, manifesto, triagem)

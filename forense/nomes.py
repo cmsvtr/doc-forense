@@ -138,3 +138,35 @@ def e_contrato(doc: dict) -> bool:
     inicio = "\n".join(pg.get("texto") or "" for pg in doc["paginas"][:2])[:3000]
     texto = "\n".join(pg.get("texto") or "" for pg in doc["paginas"][:10])
     return bool(_TITULO_CONTRATO.search(inicio[:600])) and len(_SINAIS_CONTRATO.findall(texto)) >= 3
+
+
+_COMUNICACAO = [  # (tipo, padrão no início do documento, sem acento e em minúsculas), na ordem de preferência
+    ("transcrição de conversa", re.compile(r"\btranscri(cao|coes)\b|\binterlocutor(es)?\b|\b(ligacao|dialogo|conversa) telefonic")),
+    ("ata de reunião", re.compile(r"\bata\b.{0,60}\breuniao\b|\bata da\b.{0,40}\b(reuniao|assembleia)\b|\b(presentes|participantes)\s*:")),
+    ("memorando", re.compile(r"\bmemorando\b|\bcomunicacao interna\b|\bmemo\s*n")),
+    ("carta ou ofício", re.compile(r"\b(prezad[oa]s?|ilustrissim[oa]|caro senhor|cara senhora)\b")),
+    ("fax", re.compile(r"\bfax\b.{0,40}\b(de|para|n[o.]?|pagina)")),
+]
+_FECHO_CARTA = re.compile(r"\b(atenciosamente|cordialmente|respeitosamente|saudacoes)\b")
+
+
+def tipo_comunicacao(doc: dict) -> str | None:
+    """Tipo de comunicação entre pessoas, ou None. Ofício do próprio Cade (ato do SEI) não conta: é
+    expediente do processo, não prova."""
+    from .comunicacoes import mensagens_de_chat
+
+    if emails_do_documento(doc):
+        return "e-mail"
+    if len(mensagens_de_chat(doc)) >= 2:
+        return "conversa"
+    sei = doc.get("sei") or {}
+    inicio = _sem_acento("\n".join(pg.get("texto") or "" for pg in doc["paginas"][:2])[:4000].lower())
+    for tipo, padrao in _COMUNICACAO:
+        if not padrao.search(inicio):
+            continue
+        if tipo == "carta ou ofício":
+            if sei.get("especie_ato") or not _FECHO_CARTA.search(_sem_acento(
+                    "\n".join(pg.get("texto") or "" for pg in doc["paginas"][:6]).lower())):
+                continue
+        return tipo
+    return None

@@ -76,6 +76,7 @@ PRIORIDADE_MIN_EMPRESAS = 2     # empresas diferentes citadas (CNPJ ou nome com 
 PRIORIDADE_MIN_PESSOAS = 2      # pessoas diferentes citadas (CPF, cabeçalho de e-mail, prenome + sobrenome)
 PRIORIZAR_EMAILS = True         # documento com cabeçalho de e-mail (De/Para/Data/Assunto), HTML ou PDF
 PRIORIZAR_CONTRATOS = True      # contrato, aditivo, termo de compromisso, acordo de consórcio
+PRIORIZAR_COMUNICACOES = True   # conversa (WhatsApp), carta, ata de reunião, memorando, transcrição, fax
 
 # Bônus estruturais (não dependem de palavras).
 BONUS_CNPJS_DISTINTOS = 3       # documento cita 2+ CNPJs diferentes (possíveis concorrentes)
