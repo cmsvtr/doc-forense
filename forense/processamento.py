@@ -57,6 +57,15 @@ def ferramentas_disponiveis(idioma: str) -> dict:
     return ferramentas
 
 
+def sei_do_documento(doc: dict) -> dict | None:
+    """Identificação SEI pelo caminho (dentro de originais/) e pelo cabeçalho das primeiras páginas.
+    Barata e sem OCR: recalculada nos documentos já extraídos quando a regra muda."""
+    rel = doc["arquivo"]["caminhos"][0]
+    rel = rel.split("/", 1)[1] if rel.startswith("originais/") else rel
+    inicio = "\n".join(pg.get("texto") or "" for pg in doc["paginas"][:2])
+    return identificar_sei(rel, "." + rel.rsplit(".", 1)[-1].lower(), inicio)
+
+
 # ------------------------------------------------------------------ worker (outro processo)
 
 _FERRAMENTAS_WORKER: dict = {}
@@ -110,9 +119,7 @@ def processar_documento(caminho: str, sha256: str, caminhos_rel: list[str], para
         doc["erros"] = resultado.pop("erros")
         doc.update(resultado)
         doc["entidades"] = entidades_por_pagina(doc["paginas"])
-        inicio_texto = "\n".join(pg.get("texto", "") for pg in doc["paginas"][:2])
-        rel_originais = caminhos_rel[0].split("/", 1)[1] if "/" in caminhos_rel[0] else caminhos_rel[0]
-        doc["sei"] = identificar_sei(rel_originais, p.suffix.lower(), inicio_texto)
+        doc["sei"] = sei_do_documento(doc)
     except Exception as e:
         doc["status"] = "erro"
         doc["erros"].append(f"{type(e).__name__}: {e}")
@@ -256,10 +263,19 @@ def processar_caso(caso: Caso, parametros: dict | None = None, workers: int | No
             existente = _ja_extraido(destino, parametros)
             if existente is None:
                 pendentes.append((str(caminhos[0]), sha, rels, parametros, str(destino)))
-            elif existente["arquivo"]["caminhos"] != rels:
-                existente["arquivo"]["caminhos"] = rels
-                escrever_json_atomico(destino, existente)
-                caso.registrar("caminhos_atualizados", sha256=sha, caminhos=rels)
+            else:
+                mudou = []
+                if existente["arquivo"]["caminhos"] != rels:
+                    existente["arquivo"]["caminhos"] = rels
+                    mudou.append("caminhos")
+                sei = sei_do_documento(existente)
+                if existente.get("sei") != sei:
+                    existente["sei"] = sei
+                    mudou.append("sei")
+                if mudou:  # metadados recalculados; o texto e o OCR ficam como estão
+                    escrever_json_atomico(destino, existente)
+                    caso.registrar("metadados_atualizados", sha256=sha, campos=mudou,
+                                   caminhos=rels, sei=(sei or {}).get("numero"))
 
         # documentos cujo original saiu da pasta vão para extraido/removidos (não são apagados)
         validos = {caso.caminho_json(sha).name for sha in por_hash}

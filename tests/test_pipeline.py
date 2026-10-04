@@ -184,3 +184,41 @@ def test_windows_troca_recusada_enquanto_arquivo_aberto(caso, monkeypatch):
     monkeypatch.setattr(modulo_caso.time, "sleep", lambda s: None)
     Progresso(caso).salvar()
     assert not list(caso.raiz.glob(".tmp_*"))
+
+
+def test_sei_recalculado_sem_refazer_extracao(caso):
+    """Mudança na regra do SEI não obriga a refazer o OCR: o número é recalculado no lugar."""
+    import json
+
+    processar_caso(caso, workers=2, log=lambda m: None)
+    alvo = next(j for j in caso.extraido.glob("*.json")
+                if json.loads(j.read_text(encoding="utf-8"))["arquivo"]["nome"] == "ata_reuniao.pdf")
+    d = json.loads(alvo.read_text(encoding="utf-8"))
+    d["sei"] = {"numero": "007351", "fonte": "pasta de anexo"}  # como a regra antiga gravaria
+    extraido_em = d["extracao"]["extraido_em"]
+    alvo.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+
+    r = processar_caso(caso, workers=2, log=lambda m: None)
+    assert r["processados"] == 0  # nada reextraído
+    d = json.loads(alvo.read_text(encoding="utf-8"))
+    assert d["sei"] is None and d["extracao"]["extraido_em"] == extraido_em
+    assert any(e["evento"] == "metadados_atualizados" for e in caso.eventos())
+    assert caso.verificar_integridade()["ok"]  # o manifesto foi refeito com o novo hash
+
+
+def test_relatorio_tem_links_para_os_originais(caso):
+    import zipfile
+    from urllib.parse import unquote
+
+    processar_caso(caso, workers=2, log=lambda m: None)
+    destino = gerar_relatorio(caso)
+    rels = zipfile.ZipFile(destino).read("word/_rels/document.xml.rels").decode("utf-8")
+    alvos = {unquote(a) for a in __import__("re").findall(r'Target="([^"]+)" TargetMode="External"', rels)}
+    assert alvos, "o relatório não tem links"
+    for alvo in alvos:
+        assert alvo.startswith("../originais/")
+        assert (destino.parent / alvo).resolve().is_file(), alvo  # cada link aponta para um arquivo real
+    # o arquivo dentro de subpasta é linkado pelo caminho real
+    assert "../originais/emails/pregao_12_2024.html" in alvos
+    xml = zipfile.ZipFile(destino).read("word/document.xml").decode("utf-8")
+    assert xml.count("<w:hyperlink") >= len(alvos)

@@ -1,12 +1,16 @@
 """Relatório Word de apoio ao analista (guia de leitura para a nota técnica, não é anexo)."""
 
+import os
 import re
 from collections import defaultdict
 from pathlib import Path
+from typing import NamedTuple
+from urllib.parse import quote
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
@@ -23,6 +27,52 @@ MAX_PRIORIDADES = 25
 MAX_DATAS_CONTEXTO = 300
 
 _FORTES = [re.compile(p) for termos in T.CATEGORIAS.values() for p, peso in termos if peso >= 2]
+
+
+# ------------------------------------------------------------------ links para os originais
+
+class Link(NamedTuple):
+    texto: str
+    alvo: str  # caminho relativo ao relatório, codificado como URL
+
+
+def _alvo(caso: Caso, caminho_no_caso: str) -> str:
+    """Caminho do original relativo à pasta relatorios/ («../originais/…»).
+
+    Relativo, e não absoluto, para o link continuar funcionando se a pasta do caso inteira for
+    movida ou copiada. O caminho real do arquivo é usado, inclusive dentro das subpastas de anexo.
+    """
+    rel = os.path.relpath(caso.raiz / caminho_no_caso, caso.relatorios).replace(os.sep, "/")
+    return quote(rel, safe="/.-_()")
+
+
+def _link(paragrafo, texto: str, alvo: str, negrito: bool = False, tamanho: float | None = None):
+    """Acrescenta ao parágrafo um hiperlink do Word para o arquivo."""
+    r_id = paragrafo.part.relate_to(alvo, RT.HYPERLINK, is_external=True)
+    h = OxmlElement("w:hyperlink")
+    h.set(qn("r:id"), r_id)
+    h.set(qn("w:history"), "1")
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+    if negrito:
+        rpr.append(OxmlElement("w:b"))
+    cor = OxmlElement("w:color")
+    cor.set(qn("w:val"), "0563C1")
+    rpr.append(cor)
+    if tamanho:
+        sz = OxmlElement("w:sz")
+        sz.set(qn("w:val"), str(int(tamanho * 2)))
+        rpr.append(sz)
+    sub = OxmlElement("w:u")
+    sub.set(qn("w:val"), "single")
+    rpr.append(sub)
+    run.append(rpr)
+    t = OxmlElement("w:t")
+    t.text = texto
+    t.set(qn("xml:space"), "preserve")
+    run.append(t)
+    h.append(run)
+    paragrafo._p.append(h)
 
 
 # ------------------------------------------------------------------ helpers de formatação
@@ -51,6 +101,9 @@ def _tabela(doc, cabecalho: list[str], linhas: list[list], larguras_cm: list[flo
         cells = t.add_row().cells
         for i, v in enumerate(linha):
             cells[i].text = ""
+            if isinstance(v, Link):
+                _link(cells[i].paragraphs[0], v.texto, v.alvo, tamanho=fonte)
+                continue
             r = cells[i].paragraphs[0].add_run("" if v is None else str(v))
             r.font.size = Pt(fonte)
     if larguras_cm:
@@ -100,7 +153,7 @@ def _visao_geral(doc, docs, manifesto):
         doc.add_paragraph(i, style="List Bullet")
 
 
-def _prioridades(doc, triagem):
+def _prioridades(doc, triagem, caso: Caso):
     doc.add_heading("2. Por onde começar: prioridades de leitura", level=1)
     doc.add_paragraph(
         "Documentos ordenados pela pontuação da triagem. A pontuação soma termos típicos de condutas "
@@ -114,11 +167,12 @@ def _prioridades(doc, triagem):
     for r in relevantes:
         h = doc.add_heading(f"#{r['posicao']} — {r['arquivo']}  ({r['pontuacao']} pontos)", level=2)
         h.runs[0].font.size = Pt(11)
+        alvo = _alvo(caso, r["caminho"])
         p = doc.add_paragraph()
         p.add_run("Citar como: ").bold = True
         p.add_run(r.get("localizador") or r["arquivo"])
         p.add_run("  ·  Arquivo: ").bold = True
-        p.add_run(r["caminho"])
+        _link(p, r["caminho"], alvo)
         if r["bonus"]:
             p = doc.add_paragraph()
             p.add_run("Sinais estruturais: ").bold = True
@@ -131,8 +185,8 @@ def _prioridades(doc, triagem):
                 for a in achados))
         for t in _trechos_distintos(r, maximo=3):
             q = doc.add_paragraph(style="Quote")
-            q.add_run(f"p. {t['pagina']}: ").bold = True
-            q.add_run(t["trecho"])
+            _link(q, f"p. {t['pagina']}", alvo, negrito=True)
+            q.add_run(": " + t["trecho"])
 
 
 def _trechos_distintos(r: dict, maximo: int) -> list[dict]:
@@ -171,7 +225,7 @@ def _qualidade(doc, docs, manifesto):
         doc.add_paragraph("Nenhum alerta.")
 
 
-def _linha_do_tempo(doc, docs):
+def _linha_do_tempo(doc, docs, caso: Caso):
     doc.add_heading("4. Linha do tempo preliminar (sem IA)", level=1)
     doc.add_paragraph(
         "Construída só com dados objetivos: cabeçalhos de e-mail e datas citadas no texto. "
@@ -179,7 +233,8 @@ def _linha_do_tempo(doc, docs):
 
     doc.add_heading("4.1 Mensagens de e-mail", level=2)
     msgs = sorted(
-        ([m.get("data_iso") or "", m.get("de", ""), m.get("para", ""), m.get("assunto", ""), d["arquivo"]["nome"]]
+        ([m.get("data_iso") or "", m.get("de", ""), m.get("para", ""), m.get("assunto", ""),
+          Link(localizador(d), _alvo(caso, d["arquivo"]["caminhos"][0]))]
          for d in docs for m in d.get("emails", [])),
         key=lambda x: x[0] or "9999")
     if msgs:
@@ -198,7 +253,7 @@ def _linha_do_tempo(doc, docs):
             for dt in extrair_datas(original):
                 janela = norm[max(0, dt["inicio"] - 300): dt["fim"] + 300]
                 if any(r.search(janela) for r in _FORTES):
-                    eventos.append([dt["data"], localizador(d, [pg["n"]]),
+                    eventos.append([dt["data"], Link(localizador(d, [pg["n"]]), _alvo(caso, d["arquivo"]["caminhos"][0])),
                                     trecho(original, dt["inicio"], dt["fim"], 160)])
     eventos.sort(key=lambda e: e[0])
     if eventos:
@@ -247,7 +302,7 @@ def _anexo_custodia(doc, docs, caso: Caso, manifesto):
     for i, d in enumerate(docs, 1):
         ocr = sum(1 for p in d["paginas"] if p["metodo"] == "ocr")
         sei = (d.get("sei") or {}).get("numero") or "—"
-        linhas.append([i, "\n".join(d["arquivo"]["caminhos"]), sei, d["arquivo"]["tipo"].upper(), len(d["paginas"]),
+        linhas.append([i, Link(d["arquivo"]["caminhos"][0], _alvo(caso, d["arquivo"]["caminhos"][0])), sei, d["arquivo"]["tipo"].upper(), len(d["paginas"]),
                        ocr, d["status"], d["arquivo"]["sha256"]])
     _tabela(doc, ["#", "Arquivo", "SEI", "Tipo", "Pág.", "OCR", "Status", "SHA-256"], linhas,
             [0.7, 4.6, 1.4, 1, 0.9, 0.9, 1.2, 6.3], fonte=7)
@@ -307,10 +362,15 @@ def gerar_relatorio(caso: Caso) -> Path:
            "Não é prova nem conclusão. Todo trecho deve ser conferido no documento original (arquivo e página indicados), "
            "especialmente os lidos por OCR. A triagem é heurística e pode deixar passar documentos relevantes.")
 
+    doc.add_paragraph(
+        "Os nomes de arquivo e as páginas em azul são links para o original (Ctrl+clique). O Word pode pedir "
+        "confirmação antes de abrir. O link abre o arquivo, não a página: vá à página indicada. Os links "
+        "funcionam enquanto este relatório estiver na pasta relatorios do caso.")
+
     _visao_geral(doc, docs, manifesto)
-    _prioridades(doc, triagem)
+    _prioridades(doc, triagem, caso)
     _qualidade(doc, docs, manifesto)
-    _linha_do_tempo(doc, docs)
+    _linha_do_tempo(doc, docs, caso)
     _entidades(doc, docs)
     _anexo_custodia(doc, docs, caso, manifesto)
     _anexo_metodo(doc, manifesto, triagem)

@@ -43,3 +43,26 @@ def test_decisao_de_ocr():
     assert decidir_ocr("x" * 300, 0.95, p).startswith("imagem cobre")
     # página digital longa com imagem de fundo: o texto digital basta
     assert decidir_ocr("x" * 3000, 0.95, p) is None
+
+
+def test_subpastas_numero_do_processo_nao_e_sei():
+    raiz = "SEI_08700.007351_2015-51"
+    s = identificar(f"{raiz}/[104]-1157123_Anexo/sub/Planilha propostas.pdf", ".pdf", "")
+    assert (s["numero"], s["fonte"], s["anexo"]) == ("1157123", "pasta de anexo", "sub/Planilha propostas.pdf")
+    # arquivo solto na pasta do processo: o «007351» do número do processo não é SEI
+    assert identificar(f"{raiz}/Despacho de encerramento.pdf", ".pdf", "") is None
+    assert identificar("PA 08700.007351-2015-51/relatorio.pdf", ".pdf", "") is None
+    assert identificar("Processo 0001234-56.2024.8.26.0100.pdf", ".pdf", "") is None
+    # mas o SEI do nome do arquivo continua valendo, mesmo dentro da pasta do processo
+    assert identificar(f"{raiz}/[588]-1215707_E_mail.pdf", ".pdf", "")["numero"] == "1215707"
+
+
+def test_documento_n_do_anexo():
+    s = identificar("SEI_08700.007351_2015-51/[104]-1157123_Anexo/Doc. 12.pdf", ".pdf", "")
+    assert s["documento_n"] == 12
+    assert localizador({"arquivo": {"nome": "Doc. 12.pdf"}, "sei": s}, [3]) == "SEI nº 1157123, Doc. 12, p. 3"
+    s = identificar("SEI 1157123 - Anexo/Documento nº 3.pdf", ".pdf", "")
+    assert s["documento_n"] == 3
+    s = identificar("[104]-1157123_Anexo/Ata abertura.pdf", ".pdf", "")
+    assert "documento_n" not in s
+    assert localizador({"arquivo": {"nome": "x"}, "sei": s}) == "SEI nº 1157123 (Ata abertura.pdf)"
