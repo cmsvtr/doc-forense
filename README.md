@@ -28,6 +28,8 @@ A Etapa 2 usa uma IA que roda **neste computador** (Ollama com o modelo Qwen 2.5
 
 **Automático:** feche o app, rode o `atualizar.bat` e depois clique duas vezes em **`instalar_ia.bat`**. Ele instala o Ollama na pasta do usuário (sem administrador), baixa o modelo (cerca de 4,7 GB) e mede a velocidade.
 
+**Teste de velocidade:** clique duas vezes em **`testar_ia.bat`**.
+
 **Manual, se o automático falhar:**
 1. Baixe e instale o Ollama: https://ollama.com/download (botão *Download for Windows*). Não precisa entrar com conta.
 2. Depois de instalado, ele fica ativo em segundo plano (ícone perto do relógio).
