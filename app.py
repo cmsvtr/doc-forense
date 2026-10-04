@@ -263,7 +263,18 @@ with abas[4]:
         c2.metric("Páginas por OCR", sum(1 for p in d["paginas"] if p["metodo"] == "ocr"))
         c3.metric("Status", d["status"])
         c4.metric("Alertas", len(d["alertas"]))
-        st.write(f"**Arquivo(s):** {'; '.join(a['caminhos'])}  \n**SHA-256:** `{a['sha256']}`")
+        from forense.sei import localizador
+        sei = d.get("sei") or {}
+        if sei.get("numero"):
+            origem = {"nome do arquivo": "do nome do arquivo", "pasta de anexo": "da pasta de anexo",
+                      "cabeçalho": "do cabeçalho do documento"}.get(sei.get("fonte"), sei.get("fonte"))
+            ident = f"SEI {sei['numero']}, tirado {origem}"
+            if sei.get("documento_n"):
+                ident += f"; Documento {sei['documento_n']} do anexo"
+        else:
+            ident = "nenhum número SEI identificado"
+        st.write(f"**Citar como:** {localizador(d)}  \n**Identificação:** {ident}  \n"
+                 f"**Arquivo(s):** {'; '.join(a['caminhos'])}  \n**SHA-256:** `{a['sha256']}`")
         for al in d["alertas"]:
             st.warning(al)
         if d.get("emails"):
