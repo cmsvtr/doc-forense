@@ -254,16 +254,23 @@ with abas[2]:
     else:
         st.caption(t["aviso"] + " A lista de termos fica em forense/termos_cartel.py.")
         linhas = [{
-            "#": r["posicao"], "Documento": r["arquivo"], "Pontos": r["pontuacao"],
-            "Pontos/mil palavras": r["densidade_por_mil_palavras"],
+            "#": r["posicao"], "Documento": r["arquivo"],
+            "Prioridade": ", ".join(r.get("motivos_prioridade", [])) or "—",
+            "Pontos": r["pontuacao"], "Pontos/mil palavras": r["densidade_por_mil_palavras"],
             "Sinais": ", ".join(r["categorias"].keys()) or "—",
         } for r in t["documentos"]]
         st.dataframe(pd.DataFrame(linhas), hide_index=True, use_container_width=True, height=320)
-        nomes = [r["arquivo"] for r in t["documentos"] if r["pontuacao"] > 0]
+        nomes = [r["arquivo"] for r in t["documentos"] if r["pontuacao"] > 0 or r.get("prioritario")]
         if nomes:
             sel = st.selectbox("Ver por que o documento pontuou", nomes)
             r = next(x for x in t["documentos"] if x["arquivo"] == sel)
             botao_abrir(caso, r["caminho"], None, f"tri_doc_{r['documento_id']}")
+            if r.get("motivos_prioridade"):
+                st.write("**Prioridade:** " + ", ".join(r["motivos_prioridade"]))
+                if r.get("empresas_citadas"):
+                    st.caption("Empresas reconhecidas: " + "; ".join(r["empresas_citadas"]))
+                if r.get("pessoas_citadas"):
+                    st.caption("Pessoas reconhecidas: " + "; ".join(r["pessoas_citadas"]))
             if r["bonus"]:
                 st.write("**Sinais estruturais:** " + "; ".join(r["bonus"]))
             for cat, achados in r["categorias"].items():

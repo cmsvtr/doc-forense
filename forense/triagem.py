@@ -9,6 +9,7 @@ import re
 
 from . import termos_cartel as T
 from .caso import Caso, agora, escrever_json_atomico, ler_json
+from .nomes import contar_empresas, e_contrato, emails_do_documento, empresas, pessoas
 from .sei import localizador
 from .texto import normalizar, trecho
 
@@ -59,7 +60,26 @@ def triar_documento(doc: dict, trechos_por_termo: int = 2) -> dict:
         bonus.append(f"e-mails de {len(dominios)} domínios ({', '.join(sorted(dominios)[:4])}) (+{T.BONUS_DOMINIOS_DISTINTOS})")
 
     palavras = sum(len((pg.get("texto") or "").split()) for pg in doc["paginas"])
+
+    texto_todo = "\n".join(original for _, original, _ in textos)
+    msgs = emails_do_documento(doc)
+    lista_empresas = sorted(empresas(texto_todo))
+    lista_pessoas = sorted(pessoas(texto_todo, msgs))
+    motivos = []
+    if T.PRIORIZAR_EMAILS and msgs:
+        motivos.append(f"e-mail ({len(msgs)} mensagem(ns))")
+    if T.PRIORIZAR_CONTRATOS and e_contrato(doc):
+        motivos.append("contrato")
+    n_empresas = contar_empresas(set(lista_empresas))
+    if n_empresas >= T.PRIORIDADE_MIN_EMPRESAS:
+        motivos.append(f"{n_empresas} empresas")
+    if len(lista_pessoas) >= T.PRIORIDADE_MIN_PESSOAS:
+        motivos.append(f"{len(lista_pessoas)} pessoas")
     return {
+        "prioritario": bool(motivos),
+        "motivos_prioridade": motivos,
+        "empresas_citadas": lista_empresas[:30],
+        "pessoas_citadas": lista_pessoas[:30],
         "documento_id": doc["documento_id"],
         "arquivo": doc["arquivo"]["nome"],
         "caminho": doc["arquivo"]["caminhos"][0],
@@ -74,14 +94,16 @@ def triar_documento(doc: dict, trechos_por_termo: int = 2) -> dict:
 
 def triar_caso(caso: Caso) -> dict:
     resultados = [triar_documento(d) for d in caso.documentos()]
-    resultados.sort(key=lambda r: (-r["pontuacao"], r["arquivo"].lower()))
+    # primeiro os prioritários (e-mail, contrato, 2+ empresas, 2+ pessoas); dentro de cada grupo, pela pontuação
+    resultados.sort(key=lambda r: (not r["prioritario"], -r["pontuacao"], r["arquivo"].lower()))
     for i, r in enumerate(resultados, 1):
         r["posicao"] = i
     saida = {
         "schema": "doc-forense/triagem@1",
         "gerado_em": agora(),
         "termos_hash": hash_termos(),
-        "aviso": "Pontuação heurística para priorizar leitura. Não indica nem comprova conduta.",
+        "aviso": "Ordem para priorizar a leitura: primeiro e-mails, contratos e documentos com 2+ empresas ou "
+                 "2+ pessoas; depois os demais; em cada grupo, pela pontuação de termos. Não indica nem comprova conduta.",
         "documentos": resultados,
     }
     escrever_json_atomico(caso.analise / "triagem.json", saida)

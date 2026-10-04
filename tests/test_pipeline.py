@@ -330,3 +330,37 @@ def test_excluir_recusa_fora_da_pasta_de_casos_e_lixeira_indisponivel(caso, tmp_
     with pytest.raises(RuntimeError, match="Nada foi apagado"):
         excluir_caso(caso.raiz.parent, caso)
     assert caso.raiz.exists()
+
+
+def test_triagem_prioriza_emails_contratos_e_multiplas_partes(caso):
+    from fpdf import FPDF
+
+    from .conftest import _fonte
+
+    def pdf(nome, linhas):
+        p = FPDF()
+        p.add_page()
+        p.add_font("dv", "", _fonte())
+        p.set_font("dv", size=11)
+        for l in linhas:
+            p.cell(0, 8, l, new_x="LMARGIN", new_y="NEXT")
+        p.output(str(caso.originais / nome))
+
+    pdf("contrato.pdf", ["CONTRATO DE PRESTAÇÃO DE SERVIÇOS", "CONTRATANTE: Prefeitura Municipal.",
+                         "CONTRATADA: empresa vencedora.", "CLÁUSULA PRIMEIRA - DO OBJETO", "CLÁUSULA SEGUNDA - DA VIGÊNCIA"])
+    pdf("email_impresso.pdf", ["De: Ana Paula Rocha", "Enviado em: 03/02/2024 09:10", "Para: Bruno Lima",
+                               "Assunto: reunião", "Bom dia, segue a pauta."])
+    pdf("relatorio_tecnico.pdf", ["Relatório técnico de manutenção dos equipamentos.",
+                                  "Margem de segurança verificada; reajuste de rotina."])     # pontua (termos fracos)
+    processar_caso(caso, workers=2, log=lambda m: None)
+    t = {r["arquivo"]: r for r in ler_triagem(caso)["documentos"]}
+
+    assert "contrato" in t["contrato.pdf"]["motivos_prioridade"]
+    assert any(m.startswith("e-mail") for m in t["email_impresso.pdf"]["motivos_prioridade"])  # e-mail em PDF
+    assert "2 empresas" in t["pregao_12_2024.html"]["motivos_prioridade"]
+    assert "2 pessoas" in t["pregao_12_2024.html"]["motivos_prioridade"]          # Carlos Mendes e Marcos Souza
+    assert not t["relatorio_tecnico.pdf"]["prioritario"]
+    # todo prioritário vem antes de todo não prioritário, mesmo com pontuação menor
+    ordem = [r["prioritario"] for r in ler_triagem(caso)["documentos"]]
+    assert ordem == sorted(ordem, reverse=True)
+    assert t["contrato.pdf"]["posicao"] < t["relatorio_tecnico.pdf"]["posicao"]

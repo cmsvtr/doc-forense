@@ -156,11 +156,12 @@ def _visao_geral(doc, docs, manifesto):
 def _prioridades(doc, triagem, caso: Caso):
     doc.add_heading("2. Por onde começar: prioridades de leitura", level=1)
     doc.add_paragraph(
-        "Documentos ordenados pela pontuação da triagem. A pontuação soma termos típicos de condutas "
+        "Primeiro os e-mails, os contratos e os documentos que citam 2 ou mais empresas ou 2 ou mais pessoas; "
+        "depois os demais. Em cada grupo, a ordem é pela pontuação, que soma termos típicos de condutas "
         "colusivas (com peso) e sinais estruturais, como vários CNPJs ou domínios de e-mail no mesmo documento. "
         "Serve para decidir a ordem de leitura, não para concluir nada. Documento com pontuação baixa pode ser "
         "decisivo (por exemplo, linguagem cifrada).")
-    relevantes = [r for r in triagem["documentos"] if r["pontuacao"] > 0][:MAX_PRIORIDADES]
+    relevantes = [r for r in triagem["documentos"] if r["pontuacao"] > 0 or r.get("prioritario")][:MAX_PRIORIDADES]
     if not relevantes:
         doc.add_paragraph("Nenhum documento pontuou na triagem.")
         return
@@ -173,6 +174,10 @@ def _prioridades(doc, triagem, caso: Caso):
         p.add_run(r.get("localizador") or r["arquivo"])
         p.add_run("  ·  Arquivo: ").bold = True
         _link(p, r["caminho"], alvo)
+        if r.get("motivos_prioridade"):
+            p = doc.add_paragraph()
+            p.add_run("Prioridade: ").bold = True
+            p.add_run(", ".join(r["motivos_prioridade"]))
         if r["bonus"]:
             p = doc.add_paragraph()
             p.add_run("Sinais estruturais: ").bold = True
