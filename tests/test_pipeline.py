@@ -222,3 +222,36 @@ def test_relatorio_tem_links_para_os_originais(caso):
     assert "../originais/emails/pregao_12_2024.html" in alvos
     xml = zipfile.ZipFile(destino).read("word/document.xml").decode("utf-8")
     assert xml.count("<w:hyperlink") >= len(alvos)
+
+
+def test_envio_mantem_subpastas_e_avisa_doc_sem_pasta(caso):
+    rel = "SEI_08700.007351_2015-51/[104]-1157123_Anexo/Doc. 1.PDF"
+    d = caso.destino_de_envio(rel)
+    assert d == (caso.originais / rel).resolve()
+    assert caso.destino_de_envio("..\\..\\x/../Doc. 2.PDF") == (caso.originais / "x" / "Doc. 2.PDF").resolve()
+    # um «Doc. N» solto, sem a pasta do anexo: o app avisa
+    (caso.originais / "enviados").mkdir()
+    (caso.originais / "enviados" / "Doc. 1.PDF").write_bytes(b"%PDF-1.4")
+    d.parent.mkdir(parents=True)
+    d.write_bytes(b"%PDF-1.4 outro")
+    assert [p.name for p in caso.sem_pasta_de_origem()] == ["Doc. 1.PDF"]
+    assert caso.sem_pasta_de_origem()[0].parent.name == "enviados"
+
+
+def test_mover_para_a_pasta_do_anexo_nao_refaz_ocr(caso):
+    """O caso real: arquivos enviados soltos, depois recolocados na pasta do anexo."""
+    import shutil
+
+    processar_caso(caso, workers=2, log=lambda m: None)
+    antes = _por_nome(caso)["ata_reuniao.pdf"]
+    nova = caso.originais / "SEI_08700.007351_2015-51" / "[104]-1157123_Anexo"
+    nova.mkdir(parents=True)
+    shutil.move(str(caso.originais / "ata_reuniao.pdf"), nova / "Doc. 1.PDF")
+
+    r = processar_caso(caso, workers=2, log=lambda m: None)
+    assert r["processados"] == 0  # nada reextraído
+    depois = next(d for d in caso.documentos() if d["documento_id"] == antes["documento_id"])
+    assert depois["extracao"]["extraido_em"] == antes["extracao"]["extraido_em"]
+    assert depois["sei"]["numero"] == "1157123" and depois["sei"]["documento_n"] == 1
+    assert any(r["localizador"] == "SEI nº 1157123, Doc. 1" for r in ler_triagem(caso)["documentos"])
+    assert caso.verificar_integridade()["ok"]

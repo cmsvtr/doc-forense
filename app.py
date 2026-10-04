@@ -118,26 +118,43 @@ with abas[0]:
             abrir_pasta(caso.originais)
     with c2:
         st.code(str(caso.originais), language=None)
-    st.caption("Copie os documentos para essa pasta (subpastas são aceitas) ou envie abaixo. "
-               "O aplicativo nunca altera os originais.")
+    st.markdown(
+        "**Recomendado:** abra a pasta acima e **copie as pastas dos autos como estão**, com as subpastas. "
+        "O nome da pasta de anexo traz o número SEI dos arquivos de dentro (o «Doc. 1.PDF» de um anexo "
+        "só é citável como «SEI nº …, Doc. 1» se a pasta vier junto). O aplicativo nunca altera os originais.")
 
-    enviados = st.file_uploader("Enviar documentos", type=["pdf", "html", "htm"], accept_multiple_files=True,
-                                disabled=rodando)
-    if enviados and st.button(f"Adicionar {len(enviados)} arquivo(s) ao caso"):
-        destino_dir = caso.originais / "enviados"
-        destino_dir.mkdir(exist_ok=True)
-        novos = 0
-        for arq in enviados:
-            destino = destino_dir / Path(arq.name).name
-            conteudo = arq.getvalue()
-            if destino.exists():
-                if destino.read_bytes() == conteudo:
+    sem_origem = caso.sem_pasta_de_origem()
+    if sem_origem:
+        st.warning(
+            f"{len(sem_origem)} arquivo(s) «Doc. N» estão sem a pasta de anexo que dá o número SEI "
+            f"(ex.: {caso.relativo(sem_origem[0])}). Sem ela, o relatório não consegue citá-los como "
+            "«SEI nº …, Doc. N». Para corrigir: apague esses arquivos da pasta de originais, copie as "
+            "pastas dos autos com as subpastas e clique em Processar. O OCR já feito é reaproveitado "
+            "(o app reconhece cada arquivo pelo conteúdo), então não leva horas de novo.")
+
+    with st.expander("Ou envie uma pasta pelo navegador (mais lento; mantém as subpastas)"):
+        enviados = st.file_uploader("Escolha a pasta dos autos", type=["pdf", "html", "htm"],
+                                    accept_multiple_files="directory", disabled=rodando)
+        if enviados and st.button(f"Adicionar {len(enviados)} arquivo(s) ao caso"):
+            novos, problemas = 0, []
+            for arq in enviados:
+                try:
+                    destino = caso.destino_de_envio(arq.name)
+                except ValueError as e:
+                    problemas.append(str(e))
                     continue
-                destino = destino.with_name(f"{destino.stem}_{int(time.time())}{destino.suffix}")
-            destino.write_bytes(conteudo)
-            caso.registrar("arquivo_adicionado", arquivo=caso.relativo(destino), sha256=sha256_arquivo(destino))
-            novos += 1
-        st.success(f"{novos} arquivo(s) adicionados. Vá para a aba Processar.")
+                conteudo = arq.getvalue()
+                if destino.exists():
+                    if destino.read_bytes() == conteudo:
+                        continue
+                    destino = destino.with_name(f"{destino.stem}_{int(time.time())}{destino.suffix}")
+                destino.parent.mkdir(parents=True, exist_ok=True)
+                destino.write_bytes(conteudo)
+                caso.registrar("arquivo_adicionado", arquivo=caso.relativo(destino), sha256=sha256_arquivo(destino))
+                novos += 1
+            st.success(f"{novos} arquivo(s) adicionados, com as subpastas. Vá para a aba Processar.")
+            for prob in problemas:
+                st.error(prob)
 
     if ignorados:
         with st.expander("Arquivos em formatos não suportados"):

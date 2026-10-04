@@ -25,7 +25,7 @@ Linux/macOS: instale o `tesseract` com o idioma `por` pelo gerenciador de pacote
 ## Uso
 
 1. **Crie um caso** na barra lateral.
-2. **Entrada:** copie os documentos para a pasta `originais` do caso (subpastas são aceitas) ou envie pelo navegador.
+2. **Entrada:** copie as **pastas dos autos como estão**, com as subpastas, para a pasta `originais` do caso. O nome da pasta de anexo traz o número SEI dos arquivos de dentro: um «Doc. 1.PDF» enviado solto perde a referência. O envio pelo navegador também é de pasta inteira, preservando as subpastas.
 3. **Processar:** roda em segundo plano, então pode fechar o navegador. Se for interrompido, basta processar de novo: o que já foi feito não é refeito.
 4. **Triagem:** ranking de documentos para priorizar a leitura, com o motivo de cada ponto (termo, página e trecho).
 5. **Busca:** texto completo em todos os documentos, sem distinção de acentos (`"frase exata"`, `prefix*`, `termo1 OU termo2`).

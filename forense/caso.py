@@ -114,6 +114,35 @@ class Caso:
             (suportados if p.suffix.lower() in EXTENSOES else ignorados).append(p)
         return suportados, ignorados
 
+    def destino_de_envio(self, nome_enviado: str) -> Path:
+        """Onde gravar um arquivo enviado pelo navegador, mantendo as subpastas.
+
+        No envio de pasta, o navegador manda o caminho relativo («SEI_…/[104]-1157123_Anexo/Doc. 1.PDF»):
+        é a pasta que dá o número SEI aos anexos, então o caminho é preservado. Partes vazias, «.»
+        e «..» são descartadas, para nada ser gravado fora da pasta de originais.
+        """
+        partes = [p for p in re.split(r"[\\/]+", nome_enviado) if p not in ("", ".", "..")]
+        partes = [re.sub(r'[<>:"|?*\x00-\x1f]', "_", p).rstrip(" .") or "_" for p in partes]
+        if not partes:
+            raise ValueError(f"Nome de arquivo inválido: {nome_enviado!r}")
+        destino = self.originais.joinpath(*partes).resolve()
+        if not destino.is_relative_to(self.originais.resolve()):
+            raise ValueError(f"Caminho fora da pasta de originais: {nome_enviado!r}")
+        return destino
+
+    def sem_pasta_de_origem(self) -> list[Path]:
+        """Arquivos «Doc. N» sem número SEI no caminho: a pasta de anexo, que dá o número, se perdeu
+        (típico de arquivo enviado solto pelo navegador)."""
+        from .sei import identificar
+
+        suportados, _ = self.listar_originais()
+        saida = []
+        for p in suportados:
+            rel = p.resolve().relative_to(self.originais.resolve()).as_posix()
+            if re.match(r"^\s*doc(umento)?\.?\s*n?[º°o.]?\s*\d", p.stem, re.IGNORECASE) and not identificar(rel, p.suffix.lower(), ""):
+                saida.append(p)
+        return saida
+
     def relativo(self, p: Path) -> str:
         return p.resolve().relative_to(self.raiz).as_posix()
 

@@ -214,6 +214,10 @@ def _qualidade(doc, docs, manifesto):
         for e in d["erros"]:
             if "Traceback" not in e:
                 linhas.append([d["arquivo"]["nome"], f"Erro: {e}"])
+    for d in docs:
+        if not d.get("sei") and re.match(r"^\s*doc(umento)?\.?\s*n?[º°o.]?\s*\d", Path(d["arquivo"]["nome"]).stem, re.I):
+            linhas.append([d["arquivo"]["nome"], "Sem número SEI: o arquivo está fora da pasta de anexo que dá o número "
+                                                 f"({d['arquivo']['caminhos'][0]}). Copie a pasta dos autos com as subpastas."])
     duplicados = [d for d in docs if len(d["arquivo"]["caminhos"]) > 1]
     for d in duplicados:
         linhas.append([d["arquivo"]["nome"], "Arquivo idêntico (mesmo hash) em: " + "; ".join(d["arquivo"]["caminhos"])])
