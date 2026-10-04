@@ -174,29 +174,30 @@ with abas[0]:
             "pastas dos autos com as subpastas e clique em Processar. O OCR já feito é reaproveitado "
             "(o app reconhece cada arquivo pelo conteúdo), então não leva horas de novo.")
 
-    with st.expander("Ou envie uma pasta pelo navegador (mais lento; mantém as subpastas)"):
-        enviados = st.file_uploader("Escolha a pasta dos autos", type=["pdf", "html", "htm"],
-                                    accept_multiple_files="directory", disabled=rodando)
-        if enviados and st.button(f"Adicionar {len(enviados)} arquivo(s) ao caso"):
-            novos, problemas = 0, []
-            for arq in enviados:
-                try:
-                    destino = caso.destino_de_envio(arq.name)
-                except ValueError as e:
-                    problemas.append(str(e))
-                    continue
-                conteudo = arq.getvalue()
-                if destino.exists():
-                    if destino.read_bytes() == conteudo:
-                        continue
-                    destino = destino.with_name(f"{destino.stem}_{int(time.time())}{destino.suffix}")
-                destino.parent.mkdir(parents=True, exist_ok=True)
-                destino.write_bytes(conteudo)
-                caso.registrar("arquivo_adicionado", arquivo=caso.relativo(destino), sha256=sha256_arquivo(destino))
-                novos += 1
-            st.success(f"{novos} arquivo(s) adicionados, com as subpastas. Vá para a aba Processar.")
-            for prob in problemas:
-                st.error(prob)
+    st.markdown("**Importar uma pasta do computador** (copia com as subpastas, em segundo plano; a pasta de "
+                "origem não é alterada):")
+    c_esc, c_cam = st.columns([1, 3])
+    with c_esc:
+        if st.button("📁 Escolher pasta…", disabled=rodando):
+            from forense.importar import escolher_pasta
+            with st.spinner("Escolha a pasta na janela que abriu (ela pode estar atrás do navegador)…"):
+                escolhida = escolher_pasta()
+            if escolhida:
+                st.session_state["origem_importar"] = escolhida
+            else:
+                st.info("Nenhuma pasta escolhida. Se a janela não abriu, cole o caminho ao lado.")
+    with c_cam:
+        origem_txt = st.text_input("Caminho da pasta", key="origem_importar",
+                                   placeholder=r"ex.: C:\Users\voce\Documents\SEI_08700.000000_2026-00",
+                                   label_visibility="collapsed")
+    if origem_txt and st.button("⬇ Importar esta pasta para o caso", type="primary", disabled=rodando):
+        from forense.importar import validar_origem
+        try:
+            validar_origem(caso, Path(origem_txt.strip().strip('"')))
+            lancar_em_segundo_plano(caso, ["importar", str(caso.raiz), origem_txt.strip().strip('"')])
+        except (OSError, ValueError) as e:
+            st.error(str(e))
+    st.caption("O progresso aparece na aba Processar. Depois da importação, clique em Processar.")
 
     if ignorados:
         with st.expander("Arquivos em formatos não suportados"):

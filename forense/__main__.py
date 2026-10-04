@@ -8,6 +8,7 @@
   ia [--modelo M] [--sem-medir]   confere a IA local (Ollama) e mede a velocidade
   analisar-ia <pasta> [--primeiros N] [--documentos id,id] [--modelo M]   etapa 2: extração com IA
   indexar-vetores <pasta>     prepara a busca por significado (vetores no Ollama)
+  importar <pasta_do_caso> <pasta_de_origem>   copia uma pasta de autos para o caso, com as subpastas
 """
 
 import argparse
@@ -37,6 +38,9 @@ def main(argv=None) -> int:
     pa.add_argument("--documentos", default=None, help="ids separados por vírgula")
     pa.add_argument("--modelo", default=None)
     pa.add_argument("--palavras", type=int, default=None, help="palavras por trecho")
+    pi = sub.add_parser("importar")
+    pi.add_argument("caso", type=Path)
+    pi.add_argument("origem", type=Path)
     for nome in ("verificar", "relatorio", "exportar-sgnt", "indexar-vetores"):
         sub.add_parser(nome).add_argument("caso", type=Path)
     args = ap.parse_args(argv)
@@ -72,6 +76,19 @@ def main(argv=None) -> int:
                           documentos=args.documentos.split(",") if args.documentos else None,
                           primeiros=args.primeiros, palavras_max=args.palavras or PALAVRAS_POR_TRECHO,
                           log=lambda m: print(m, flush=True))
+        return 0 if r["erros"] == 0 else 1
+
+    if args.comando == "importar":
+        from .importar import importar_pasta
+        from .processamento import Progresso, em_execucao
+        if em_execucao(caso):
+            print("Já existe um processamento em andamento para este caso.")
+            return 1
+        with Progresso(caso) as prog:
+            prog.atualizar(etapa=f"importando {args.origem.name}", total=0, concluidos=0)
+            r = importar_pasta(caso, args.origem, log=lambda m: print(m, flush=True),
+                               progresso=lambda k, n, nome: prog.atualizar(total=n, concluidos=k, atual=nome))
+            prog.atualizar(etapa="concluído", resumo=r)
         return 0 if r["erros"] == 0 else 1
 
     if args.comando == "indexar-vetores":

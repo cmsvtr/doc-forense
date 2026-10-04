@@ -41,7 +41,7 @@ A Etapa 2 usa uma IA que roda **neste computador** (Ollama com o modelo Qwen 2.5
 ## Uso
 
 1. **Crie um caso** na barra lateral.
-2. **Entrada:** copie as **pastas dos autos como estão**, com as subpastas, para a pasta `originais` do caso. O nome da pasta de anexo traz o número SEI dos arquivos de dentro: um «Doc. 1.PDF» enviado solto perde a referência. O envio pelo navegador também é de pasta inteira, preservando as subpastas.
+2. **Entrada:** clique em **📁 Escolher pasta…** (ou cole o caminho) e em **Importar**. A pasta dos autos é copiada para o caso **com as subpastas**, em segundo plano; a origem não é alterada. O nome da pasta de anexo traz o número SEI dos arquivos de dentro, por isso a estrutura importa. Também dá para copiar as pastas à mão pelo botão "Abrir pasta de originais".
 3. **Processar:** roda em segundo plano, então pode fechar o navegador. Se for interrompido, basta processar de novo: o que já foi feito não é refeito.
 4. **Triagem:** ranking de documentos para priorizar a leitura, com o motivo de cada ponto (termo, página e trecho).
 5. **Busca e perguntas:**
