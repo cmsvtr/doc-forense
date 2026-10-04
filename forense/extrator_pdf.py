@@ -4,12 +4,22 @@ A decisão é POR PÁGINA (nunca por arquivo) e desconfia do texto digital curto
 texto («Documento assinado eletronicamente por…») sobre páginas escaneadas. Uma página assim
 tem texto digital, mas o conteúdo está na imagem. Pular o OCR deixa a página invisível à busca,
 e «não há elemento» vira arquivamento indevido (lição da skill sg-nt:instrucao).
+
+Duas etapas, para o OCR de um PDF grande poder ser dividido entre os núcleos:
+  planejar_pdf      lê o texto digital e decide quais páginas vão ao OCR (rápido)
+  ocr_paginas_pdf   faz o OCR de um lote de páginas (lento; vários lotes em paralelo)
 """
 
 import hashlib
 from pathlib import Path
 
 from .texto import limpar_quebras
+
+# Lado maior da imagem enviada ao OCR. A 300 dpi, A4 tem 3.508 px e A2 tem 7.016 px. Página
+# maior (planta, mapa, foto escaneada sem redução) é renderizada com resolução menor: a 300 dpi,
+# um A0 viraria uma imagem de 140 megapixels, lenta e capaz de esgotar a memória com vários
+# processos ao mesmo tempo.
+MAX_LADO_PX = 7000
 
 
 def _cobertura_imagem(pagina) -> float:
@@ -39,25 +49,29 @@ def decidir_ocr(texto_digital: str, cobertura_imagem: float, parametros: dict) -
     return None
 
 
-def extrair_pdf(caminho: Path, parametros: dict, dir_caixas: Path | None = None) -> dict:
+def escala_de_renderizacao(largura_pt: float, altura_pt: float, dpi: int) -> tuple[float, int]:
+    """(escala para o pdfium, dpi efetivo), respeitando MAX_LADO_PX."""
+    escala = dpi / 72
+    lado = max(largura_pt, altura_pt) * escala
+    if lado > MAX_LADO_PX:
+        escala = MAX_LADO_PX / max(largura_pt, altura_pt)
+    return escala, round(escala * 72)
+
+
+def planejar_pdf(caminho: Path, parametros: dict) -> dict:
+    """Texto digital de cada página e a decisão de OCR. As páginas que vão ao OCR saem com
+    metodo «pendente_ocr», para ocr_paginas_pdf completar."""
     import pypdfium2 as pdfium
-
-    from .ocr import ocr_imagem
-
-    dpi = parametros["dpi"]
-    idioma = parametros["idioma"]
 
     paginas: list[dict] = []
     erros: list[str] = []
     metadados: dict = {}
-
     pdf = pdfium.PdfDocument(str(caminho))
     try:
         try:
             metadados = dict(pdf.get_metadata_dict(skip_empty=True))
         except Exception as e:  # metadados são acessórios; não interrompem a extração
             erros.append(f"metadados ilegíveis: {e}")
-
         for i in range(len(pdf)):
             n = i + 1
             pagina = pdf[i]
@@ -68,23 +82,12 @@ def extrair_pdf(caminho: Path, parametros: dict, dir_caixas: Path | None = None)
                 tp.close()
                 cobertura = _cobertura_imagem(pagina)
                 motivo = decidir_ocr(digital, cobertura, parametros)
-
                 if motivo is None:
                     registro.update(metodo="texto_digital", texto=digital)
                 else:
-                    imagem = pagina.render(scale=dpi / 72).to_pil()
-                    texto, confianca, palavras, tsv = ocr_imagem(imagem, idioma)
-                    imagem.close()
-                    registro.update(metodo="ocr", motivo_ocr=motivo, texto=limpar_quebras(texto),
-                                    confianca_media=confianca, palavras_ocr=palavras)
+                    registro.update(metodo="pendente_ocr", motivo_ocr=motivo, texto="")
                     if digital:
                         registro["texto_digital_residual"] = digital
-                    if dir_caixas is not None:
-                        dir_caixas.mkdir(parents=True, exist_ok=True)
-                        arq = dir_caixas / f"p{n:04d}.tsv"
-                        arq.write_text(tsv, encoding="utf-8")
-                        registro["caixas"] = {"arquivo": arq.name,
-                                              "sha256": hashlib.sha256(tsv.encode("utf-8")).hexdigest()}
                 if cobertura:
                     registro["cobertura_imagem"] = round(cobertura, 2)
             except Exception as e:
@@ -96,5 +99,53 @@ def extrair_pdf(caminho: Path, parametros: dict, dir_caixas: Path | None = None)
             paginas.append(registro)
     finally:
         pdf.close()
-
     return {"paginas": paginas, "erros": erros, "metadados_pdf": metadados}
+
+
+def ocr_paginas_pdf(caminho: Path, registros: list[dict], parametros: dict,
+                    dir_caixas: Path | None = None) -> list[dict]:
+    """OCR das páginas «pendente_ocr» recebidas; devolve os registros completos. Erro numa página
+    vira registro de erro, sem interromper as outras."""
+    import pypdfium2 as pdfium
+
+    from .ocr import ocr_imagem
+
+    saida = []
+    pdf = pdfium.PdfDocument(str(caminho))
+    try:
+        for reg in registros:
+            reg = dict(reg)
+            pagina = pdf[reg["n"] - 1]
+            try:
+                escala, dpi_efetivo = escala_de_renderizacao(*pagina.get_size(), parametros["dpi"])
+                imagem = pagina.render(scale=escala, grayscale=True).to_pil()
+                texto, confianca, palavras, tsv = ocr_imagem(imagem, parametros["idioma"])
+                imagem.close()
+                reg.update(metodo="ocr", texto=limpar_quebras(texto), confianca_media=confianca, palavras_ocr=palavras)
+                if dpi_efetivo < parametros["dpi"]:
+                    reg["dpi_efetivo"] = dpi_efetivo
+                if dir_caixas is not None:
+                    dir_caixas.mkdir(parents=True, exist_ok=True)
+                    arq = dir_caixas / f"p{reg['n']:04d}.tsv"
+                    arq.write_text(tsv, encoding="utf-8")
+                    reg["caixas"] = {"arquivo": arq.name, "sha256": hashlib.sha256(tsv.encode("utf-8")).hexdigest()}
+            except Exception as e:
+                reg.update(metodo="erro", texto="", erro=f"{type(e).__name__}: {e}")
+            finally:
+                pagina.close()
+            reg["caracteres"] = len(reg.get("texto", ""))
+            saida.append(reg)
+    finally:
+        pdf.close()
+    return saida
+
+
+def extrair_pdf(caminho: Path, parametros: dict, dir_caixas: Path | None = None) -> dict:
+    """As duas etapas em sequência, num processo só."""
+    plano = planejar_pdf(caminho, parametros)
+    pendentes = [p for p in plano["paginas"] if p["metodo"] == "pendente_ocr"]
+    if pendentes:
+        feitas = {p["n"]: p for p in ocr_paginas_pdf(caminho, pendentes, parametros, dir_caixas)}
+        plano["paginas"] = [feitas.get(p["n"], p) for p in plano["paginas"]]
+        plano["erros"] += [f"página {p['n']}: {p['erro']}" for p in feitas.values() if p["metodo"] == "erro"]
+    return plano

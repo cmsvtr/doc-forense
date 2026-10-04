@@ -255,3 +255,46 @@ def test_mover_para_a_pasta_do_anexo_nao_refaz_ocr(caso):
     assert depois["sei"]["numero"] == "1157123" and depois["sei"]["documento_n"] == 1
     assert any(r["localizador"] == "SEI nº 1157123, Doc. 1" for r in ler_triagem(caso)["documentos"])
     assert caso.verificar_integridade()["ok"]
+
+
+def test_escala_respeita_tamanho_maximo():
+    from forense.extrator_pdf import MAX_LADO_PX, escala_de_renderizacao
+
+    assert escala_de_renderizacao(595, 842, 300) == (300 / 72, 300)          # A4: 300 dpi
+    escala, dpi = escala_de_renderizacao(2384, 3370, 300)                     # A0
+    assert round(3370 * escala) <= MAX_LADO_PX and dpi < 300
+
+
+@ocr_disponivel
+def test_pagina_gigante_e_pdf_grande_em_lotes(caso):
+    """Página de planta (enorme) sai com resolução limitada e alerta; PDF longo é dividido em
+    lotes de OCR entre os processos e remontado na ordem."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    from .conftest import _fonte
+
+    fonte = ImageFont.truetype(_fonte(), 60)
+    img = Image.new("RGB", (2000, 2800), "white")
+    ImageDraw.Draw(img).text((100, 200), "PLANTA DO LOTE 3", fill="black", font=fonte)
+    img.save(caso.originais / "planta.pdf", "PDF", resolution=30)  # 2000 px a 30 dpi: página de 1,7 m
+
+    pags = []
+    for i in range(1, 11):
+        im = Image.new("RGB", (1240, 1754), "white")
+        ImageDraw.Draw(im).text((100, 200), f"Página número {i} do volume", fill="black", font=fonte)
+        pags.append(im)
+    pags[0].save(caso.originais / "volume.pdf", "PDF", resolution=150, save_all=True, append_images=pags[1:])
+
+    processar_caso(caso, workers=3, log=lambda m: None)
+    docs = _por_nome(caso)
+    planta = docs["planta.pdf"]["paginas"][0]
+    assert planta["metodo"] == "ocr" and planta["dpi_efetivo"] < 300
+    assert "PLANTA" in planta["texto"]
+    assert any("muito grande" in a for a in docs["planta.pdf"]["alertas"])
+
+    volume = docs["volume.pdf"]
+    assert [p["n"] for p in volume["paginas"]] == list(range(1, 11))
+    assert all(p["metodo"] == "ocr" for p in volume["paginas"])
+    for p in volume["paginas"]:
+        assert f"número {p['n']}" in p["texto"], (p["n"], p["texto"])   # cada texto na sua página
+        assert (caso.extraido / "caixas" / volume["documento_id"] / f"p{p['n']:04d}.tsv").exists()

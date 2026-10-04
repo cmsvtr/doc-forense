@@ -84,7 +84,8 @@ Use a **sg-nt 0.2.2 ou mais nova**. Até a 0.2.1, o `build_corpus.py` tratava co
 - Página escaneada girada (de lado ou de ponta-cabeça) sai com OCR ruim; a detecção de orientação ainda não foi implementada.
 - Formatos além de PDF e HTML (zip, e-mail `.eml`/`.msg`, planilhas, Word) são listados como "não suportados" no relatório, mas não são lidos.
 - A numeração de parágrafos que o SEI gera por CSS no HTML não é reconstruída.
-- Velocidade: o OCR leva alguns segundos por página na CPU. Centenas de páginas escaneadas levam horas: deixe processando.
+- Velocidade: o OCR leva cerca de 3 segundos por página em cada núcleo. Os PDFs são divididos em lotes de 4 páginas entre os núcleos, então um PDF grande não ocupa um núcleo só. Centenas de páginas escaneadas ainda levam tempo: deixe processando.
+- Página muito grande (planta, mapa) é lida com resolução reduzida (lado maior de até 7.000 px), e o relatório avisa.
 
 ## Desenvolvimento
 

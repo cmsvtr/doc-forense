@@ -12,7 +12,7 @@ import shutil
 import threading
 import time
 import traceback
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from datetime import datetime
 from pathlib import Path
 
@@ -76,21 +76,14 @@ def _inicializar_worker(idioma: str) -> None:
     _FERRAMENTAS_WORKER = ferramentas_disponiveis(idioma)
 
 
-def processar_documento(caminho: str, sha256: str, caminhos_rel: list[str], parametros: dict, destino: str) -> dict:
-    """Extrai um documento e grava o JSON da camada bruta. Nunca levanta exceção."""
-    from .extrator_html import extrair_html
-    from .extrator_pdf import extrair_pdf
-
-    inicio = time.monotonic()
-    p = Path(caminho)
-    tipo = EXTENSOES[p.suffix.lower()]
-    doc = {
+def _novo_documento(p: Path, sha256: str, caminhos_rel: list[str], parametros: dict) -> dict:
+    return {
         "schema": "doc-forense/documento@1",
         "documento_id": sha256[:16],
         "arquivo": {
             "nome": p.name,
             "caminhos": caminhos_rel,
-            "tipo": tipo,
+            "tipo": EXTENSOES[p.suffix.lower()],
             "tamanho_bytes": p.stat().st_size,
             "sha256": sha256,
             "modificado_em_sistema": datetime.fromtimestamp(p.stat().st_mtime).astimezone().isoformat(timespec="seconds"),
@@ -106,25 +99,22 @@ def processar_documento(caminho: str, sha256: str, caminhos_rel: list[str], para
         "alertas": [],
         "paginas": [],
     }
-    try:
-        if sha256_arquivo(p) != sha256:
-            raise RuntimeError("o arquivo mudou durante o processamento (hash diferente)")
-        if tipo == "html":
-            resultado = extrair_html(p, parametros)
-        else:
-            dir_caixas = Path(destino).parent / "caixas" / sha256[:16]
-            shutil.rmtree(dir_caixas, ignore_errors=True)  # reextração: caixas antigas saem
-            resultado = extrair_pdf(p, parametros, dir_caixas=dir_caixas)
-        doc["paginas"] = resultado.pop("paginas")
-        doc["erros"] = resultado.pop("erros")
-        doc.update(resultado)
-        doc["entidades"] = entidades_por_pagina(doc["paginas"])
-        doc["sei"] = sei_do_documento(doc)
-    except Exception as e:
-        doc["status"] = "erro"
-        doc["erros"].append(f"{type(e).__name__}: {e}")
-        doc["erros"].append(traceback.format_exc(limit=3))
 
+
+def _registrar_erro(doc: dict, e: Exception) -> None:
+    doc["status"] = "erro"
+    doc["erros"].append(f"{type(e).__name__}: {e}")
+    doc["erros"].append(traceback.format_exc(limit=3))
+
+
+def finalizar_documento(doc: dict, parametros: dict, destino: str, duracao_s: float) -> dict:
+    """Entidades, SEI, alertas e status; grava o JSON da camada bruta e devolve o resumo."""
+    if doc["status"] != "erro":
+        try:
+            doc["entidades"] = entidades_por_pagina(doc["paginas"])
+            doc["sei"] = sei_do_documento(doc)
+        except Exception as e:
+            _registrar_erro(doc, e)
     for pg in doc["paginas"]:
         if pg["metodo"] == "ocr":
             conf = pg.get("confianca_media")
@@ -133,6 +123,8 @@ def processar_documento(caminho: str, sha256: str, caminhos_rel: list[str], para
                 doc["alertas"].append(f"Página {pg['n']}: OCR com confiança {conf:.0f}% — conferir com a imagem original.")
             if pg["caracteres"] < 20:
                 doc["alertas"].append(f"Página {pg['n']}: quase sem texto após OCR (imagem, página em branco ou manuscrito?).")
+            if pg.get("dpi_efetivo"):
+                doc["alertas"].append(f"Página {pg['n']}: página muito grande; OCR feito a {pg['dpi_efetivo']} dpi.")
         elif pg["metodo"] == "erro":
             doc["alertas"].append(f"Página {pg['n']}: falha na extração.")
     if doc["status"] == "ok" and any(pg["metodo"] == "erro" for pg in doc["paginas"]):
@@ -140,15 +132,65 @@ def processar_documento(caminho: str, sha256: str, caminhos_rel: list[str], para
     if doc["status"] == "ok" and not any(pg["caracteres"] for pg in doc["paginas"]):
         doc["status"] = "parcial"
         doc["alertas"].append("Nenhum texto extraído do documento.")
-
-    doc["extracao"]["duracao_s"] = round(time.monotonic() - inicio, 2)
+    doc["extracao"]["duracao_s"] = round(duracao_s, 2)
     escrever_json_atomico(Path(destino), doc)
     return {
-        "arquivo": p.name, "sha256": sha256, "status": doc["status"],
+        "arquivo": doc["arquivo"]["nome"], "sha256": doc["arquivo"]["sha256"], "status": doc["status"],
         "paginas": len(doc["paginas"]),
         "paginas_ocr": sum(1 for pg in doc["paginas"] if pg["metodo"] == "ocr"),
         "duracao_s": doc["extracao"]["duracao_s"],
     }
+
+
+def processar_documento(caminho: str, sha256: str, caminhos_rel: list[str], parametros: dict, destino: str) -> dict:
+    """Extrai um documento inteiro num processo e grava o JSON. Nunca levanta exceção."""
+    from .extrator_html import extrair_html
+    from .extrator_pdf import extrair_pdf
+
+    inicio = time.monotonic()
+    p = Path(caminho)
+    doc = _novo_documento(p, sha256, caminhos_rel, parametros)
+    try:
+        if sha256_arquivo(p) != sha256:
+            raise RuntimeError("o arquivo mudou durante o processamento (hash diferente)")
+        if doc["arquivo"]["tipo"] == "html":
+            resultado = extrair_html(p, parametros)
+        else:
+            dir_caixas = Path(destino).parent / "caixas" / sha256[:16]
+            shutil.rmtree(dir_caixas, ignore_errors=True)  # reextração: caixas antigas saem
+            resultado = extrair_pdf(p, parametros, dir_caixas=dir_caixas)
+        doc["paginas"] = resultado.pop("paginas")
+        doc["erros"] = resultado.pop("erros")
+        doc.update(resultado)
+    except Exception as e:
+        _registrar_erro(doc, e)
+    return finalizar_documento(doc, parametros, destino, time.monotonic() - inicio)
+
+
+def preparar_pdf(caminho: str, sha256: str, caminhos_rel: list[str], parametros: dict, destino: str) -> dict:
+    """Primeira etapa de um PDF: texto digital e plano de OCR. Devolve o documento parcial."""
+    from .extrator_pdf import planejar_pdf
+
+    p = Path(caminho)
+    doc = _novo_documento(p, sha256, caminhos_rel, parametros)
+    try:
+        if sha256_arquivo(p) != sha256:
+            raise RuntimeError("o arquivo mudou durante o processamento (hash diferente)")
+        shutil.rmtree(Path(destino).parent / "caixas" / sha256[:16], ignore_errors=True)
+        plano = planejar_pdf(p, parametros)
+        doc["paginas"] = plano.pop("paginas")
+        doc["erros"] = plano.pop("erros")
+        doc.update(plano)
+    except Exception as e:
+        _registrar_erro(doc, e)
+    return doc
+
+
+def ocr_lote(caminho: str, registros: list[dict], parametros: dict, dir_caixas: str) -> list[dict]:
+    """Segunda etapa: OCR de um lote de páginas de um PDF."""
+    from .extrator_pdf import ocr_paginas_pdf
+
+    return ocr_paginas_pdf(Path(caminho), registros, parametros, Path(dir_caixas))
 
 
 # ------------------------------------------------------------------ progresso
@@ -230,6 +272,84 @@ def _ja_extraido(caminho_json: Path, parametros: dict) -> dict | None:
     return doc
 
 
+LOTE_PAGINAS_OCR = 4  # páginas por tarefa de OCR: pequeno o bastante para repartir, grande o bastante para amortizar a abertura do PDF
+
+
+def _executar_extracao(caso: Caso, pendentes: list, parametros: dict, workers: int, resumo: dict, prog, log) -> None:
+    # spawn em todas as plataformas: é o modo do Windows e evita fork com thread ativa
+    contexto = multiprocessing.get_context("spawn")
+    feitos = 0
+
+    def concluir(r: dict, origem: str | None = None, erro: str | None = None):
+        nonlocal feitos
+        if erro:
+            caso.registrar("falha_worker", arquivo=origem, erro=erro)
+        feitos += 1
+        resumo["processados"] += 1
+        resumo["paginas_ocr"] += r["paginas_ocr"]
+        if r["status"] == "erro":
+            resumo["erros"] += 1
+        elif r["status"] == "parcial":
+            resumo["parciais"] += 1
+        log(f"  [{feitos}/{len(pendentes)}] {r['arquivo']}: {r['status']}, {r['paginas']} pág. "
+            f"({r['paginas_ocr']} OCR), {r['duracao_s']}s")
+        prog.atualizar(concluidos=feitos, atual=r["arquivo"], erros=resumo["erros"])
+
+    def falha(args) -> dict:
+        return {"arquivo": Path(args[0]).name, "status": "erro", "paginas": 0, "paginas_ocr": 0, "duracao_s": 0}
+
+    with ProcessPoolExecutor(max_workers=workers, mp_context=contexto,
+                             initializer=_inicializar_worker, initargs=(parametros["idioma"],)) as pool:
+        ativos: dict = {}
+        estado: dict = {}  # destino -> {"doc", "args", "inicio", "faltam", "total_ocr", "feitas"}
+        for args in pendentes:
+            tarefa = processar_documento if Path(args[0]).suffix.lower() in (".html", ".htm") else preparar_pdf
+            ativos[pool.submit(tarefa, *args)] = (tarefa.__name__, args)
+            estado[args[4]] = {"inicio": time.monotonic(), "args": args}
+
+        while ativos:
+            prontos, _ = wait(ativos, return_when=FIRST_COMPLETED)
+            for fut in prontos:
+                tipo, args = ativos.pop(fut)
+                destino = args[4]
+                st = estado[destino]
+                try:
+                    resultado = fut.result()
+                except Exception as e:  # falha do processo em si (ex.: memória esgotada)
+                    if st.get("abortado"):
+                        continue
+                    st["abortado"] = True
+                    concluir(falha(args), args[0], str(e))
+                    continue
+                if st.get("abortado"):
+                    continue
+
+                if tipo == "processar_documento":
+                    concluir(resultado)
+                elif tipo == "preparar_pdf":
+                    doc = resultado
+                    pendentes_ocr = [pg for pg in doc["paginas"] if pg["metodo"] == "pendente_ocr"]
+                    st.update(doc=doc, faltam=0, total_ocr=len(pendentes_ocr), feitas=0)
+                    dir_caixas = str(Path(destino).parent / "caixas" / args[1][:16])
+                    for k in range(0, len(pendentes_ocr), LOTE_PAGINAS_OCR):
+                        lote = pendentes_ocr[k:k + LOTE_PAGINAS_OCR]
+                        ativos[pool.submit(ocr_lote, args[0], lote, parametros, dir_caixas)] = ("ocr_lote", args)
+                        st["faltam"] += 1
+                    if not st["faltam"]:
+                        concluir(finalizar_documento(doc, parametros, destino, time.monotonic() - st["inicio"]))
+                else:  # ocr_lote
+                    feitas = {pg["n"]: pg for pg in resultado}
+                    doc = st["doc"]
+                    doc["paginas"] = [feitas.get(pg["n"], pg) for pg in doc["paginas"]]
+                    doc["erros"] += [f"página {pg['n']}: {pg['erro']}" for pg in resultado if pg["metodo"] == "erro"]
+                    st["faltam"] -= 1
+                    st["feitas"] += len(resultado)
+                    if st["total_ocr"] > LOTE_PAGINAS_OCR:
+                        prog.atualizar(atual=f"{doc['arquivo']['nome']}: OCR {st['feitas']}/{st['total_ocr']} páginas")
+                    if not st["faltam"]:
+                        concluir(finalizar_documento(doc, parametros, destino, time.monotonic() - st["inicio"]))
+
+
 def processar_caso(caso: Caso, parametros: dict | None = None, workers: int | None = None, log=print) -> dict:
     from .indice import reconstruir_indice
     from .triagem import triar_caso
@@ -290,32 +410,14 @@ def processar_caso(caso: Caso, parametros: dict | None = None, workers: int | No
 
         log(f"[*] {len(pendentes)} para extrair, {len(por_hash) - len(pendentes)} já extraídos.")
 
-        # 3) extração em paralelo
+        # 3) extração em paralelo. HTML vai inteiro a um processo. PDF passa por duas etapas: o plano
+        # (texto digital e decisão de OCR) e o OCR em lotes de páginas, distribuídos entre os
+        # processos à medida que ficam livres. Assim um PDF de 1.000 páginas não ocupa um núcleo
+        # só enquanto os outros esperam.
         prog.atualizar(etapa="extraindo texto", total=len(pendentes), concluidos=0, atual=None)
         resumo = {"processados": 0, "erros": 0, "parciais": 0, "paginas_ocr": 0}
         if pendentes:
-            # spawn em todas as plataformas: é o modo do Windows e evita fork com thread ativa
-            with ProcessPoolExecutor(max_workers=min(workers, len(pendentes)),
-                                     mp_context=multiprocessing.get_context("spawn"),
-                                     initializer=_inicializar_worker,
-                                     initargs=(parametros["idioma"],)) as pool:
-                futuros = {pool.submit(processar_documento, *args): args for args in pendentes}
-                for i, fut in enumerate(as_completed(futuros), 1):
-                    args = futuros[fut]
-                    try:
-                        r = fut.result()
-                    except Exception as e:  # falha do processo em si (ex.: memória)
-                        r = {"arquivo": Path(args[0]).name, "status": "erro", "paginas": 0, "paginas_ocr": 0, "duracao_s": 0}
-                        caso.registrar("falha_worker", arquivo=args[0], erro=str(e))
-                    resumo["processados"] += 1
-                    resumo["paginas_ocr"] += r["paginas_ocr"]
-                    if r["status"] == "erro":
-                        resumo["erros"] += 1
-                    elif r["status"] == "parcial":
-                        resumo["parciais"] += 1
-                    log(f"  [{i}/{len(pendentes)}] {r['arquivo']}: {r['status']}, {r['paginas']} pág. "
-                        f"({r['paginas_ocr']} OCR), {r['duracao_s']}s")
-                    prog.atualizar(concluidos=i, atual=r["arquivo"], erros=resumo["erros"])
+            _executar_extracao(caso, pendentes, parametros, workers, resumo, prog, log)
 
         # 4) manifesto, índice e triagem
         prog.atualizar(etapa="gerando manifesto", atual=None)
