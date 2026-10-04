@@ -6,6 +6,7 @@
   relatorio <pasta_do_caso>   gera o relatório Word de apoio
   exportar-sgnt <pasta>       exporta o corpus (texto e caixas do OCR) para a skill sg-nt:instrucao
   ia [--modelo M] [--sem-medir]   confere a IA local (Ollama) e mede a velocidade
+  analisar-ia <pasta> [--primeiros N] [--documentos id,id] [--modelo M]   etapa 2: extração com IA
 """
 
 import argparse
@@ -29,6 +30,12 @@ def main(argv=None) -> int:
     p.add_argument("--workers", type=int, default=None, help="processos paralelos (padrão: metade dos núcleos lógicos)")
     p.add_argument("--forcar-ocr", action="store_true", help="faz OCR mesmo em páginas com texto digital")
     p.add_argument("--dpi", type=int, default=None)
+    pa = sub.add_parser("analisar-ia")
+    pa.add_argument("caso", type=Path)
+    pa.add_argument("--primeiros", type=int, default=None, help="só os N primeiros da triagem")
+    pa.add_argument("--documentos", default=None, help="ids separados por vírgula")
+    pa.add_argument("--modelo", default=None)
+    pa.add_argument("--palavras", type=int, default=None, help="palavras por trecho")
     for nome in ("verificar", "relatorio", "exportar-sgnt"):
         sub.add_parser(nome).add_argument("caso", type=Path)
     args = ap.parse_args(argv)
@@ -56,6 +63,15 @@ def main(argv=None) -> int:
             parametros["dpi"] = args.dpi
         resumo = processar_caso(caso, parametros, workers=args.workers, log=lambda m: print(m, flush=True))
         return 0 if resumo["erros"] == 0 else 1
+
+    if args.comando == "analisar-ia":
+        from .analise_ia import PALAVRAS_POR_TRECHO, analisar_caso
+        from .ia import MODELO_PADRAO
+        r = analisar_caso(caso, args.modelo or MODELO_PADRAO,
+                          documentos=args.documentos.split(",") if args.documentos else None,
+                          primeiros=args.primeiros, palavras_max=args.palavras or PALAVRAS_POR_TRECHO,
+                          log=lambda m: print(m, flush=True))
+        return 0 if r["erros"] == 0 else 1
 
     if args.comando == "verificar":
         r = caso.verificar_integridade()
