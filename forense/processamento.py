@@ -180,9 +180,13 @@ class Progresso:
         self.salvar()
 
     def salvar(self):
+        """O progresso é só informativo: falhar ao gravá-lo nunca interrompe o processamento."""
         with self._trava:
             self.dados["heartbeat"] = time.time()
-            escrever_json_atomico(self.caso.progresso, self.dados)
+            try:
+                escrever_json_atomico(self.caso.progresso, self.dados)
+            except OSError:
+                pass  # a próxima batida (5 s) tenta de novo
 
 
 def ler_progresso(caso: Caso) -> dict | None:

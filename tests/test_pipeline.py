@@ -154,3 +154,33 @@ def test_indice_antigo_e_reconstruido(caso):
         con.execute("ALTER TABLE documentos DROP COLUMN localizador")
         con.commit()
     assert any(r["nome"] == "pregao_12_2024.html" for r in buscar(caso, "cobertura"))
+
+
+def test_windows_troca_recusada_enquanto_arquivo_aberto(caso, monkeypatch):
+    """No Windows, os.replace falha («Acesso negado») se outro processo estiver lendo o destino."""
+    import os
+
+    import forense.caso as modulo_caso
+    from forense.caso import escrever_json_atomico
+    from forense.processamento import Progresso
+
+    original = os.replace
+    recusas = {"n": 0}
+
+    def replace_como_windows(a, b):
+        if recusas["n"] < 3:
+            recusas["n"] += 1
+            raise PermissionError(5, "Acesso negado")
+        return original(a, b)
+
+    monkeypatch.setattr(modulo_caso.os, "replace", replace_como_windows)
+    destino = caso.raiz / "teste.json"
+    escrever_json_atomico(destino, {"ok": 1})  # recusado 3 vezes, gravado na 4ª
+    assert destino.exists() and recusas["n"] == 3
+    assert not list(caso.raiz.glob(".tmp_*"))
+
+    # recusa permanente: o progresso não derruba quem o grava
+    monkeypatch.setattr(modulo_caso.os, "replace", lambda a, b: (_ for _ in ()).throw(PermissionError(5, "Acesso negado")))
+    monkeypatch.setattr(modulo_caso.time, "sleep", lambda s: None)
+    Progresso(caso).salvar()
+    assert not list(caso.raiz.glob(".tmp_*"))

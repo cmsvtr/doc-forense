@@ -9,7 +9,7 @@ import sqlite3
 import tempfile
 from contextlib import closing
 
-from .caso import Caso
+from .caso import Caso, substituir
 from .sei import localizador
 
 # hífen no fim da linha, admitindo uma linha em branco no meio (comum no HTML convertido)
@@ -68,7 +68,7 @@ def reconstruir_indice(caso: Caso) -> int:
                         (did, tipo, it["valor"], ",".join(map(str, it["paginas"]))) for it in itens])
                 n += 1
             con.commit()
-        os.replace(tmp, caso.indice)
+        substituir(tmp, caso.indice)
     except BaseException:
         if os.path.exists(tmp):
             os.remove(tmp)

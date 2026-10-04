@@ -16,6 +16,8 @@ Aplicativo local para organizar documentos de investigação de cartéis: recebe
    - cria o atalho **doc-forense** na área de trabalho.
 3. Se o diagnóstico final mostrar `FALHA` no Tesseract logo depois de instalá-lo, feche a janela e rode o `instalar.bat` de novo.
 
+Para atualizar: feche o aplicativo e clique duas vezes em **`atualizar.bat`**. Ele baixa a versão nova e troca só o código; os casos, o Python instalado e o idioma do OCR ficam como estão.
+
 Para usar: clique no atalho **doc-forense** (ou em `abrir.bat`). O navegador abre o aplicativo em `http://localhost:8501`. A janela preta precisa ficar aberta enquanto você usa.
 
 Linux/macOS: instale o `tesseract` com o idioma `por` pelo gerenciador de pacotes e rode `uv sync --no-dev` e depois `uv run --no-dev streamlit run app.py`.

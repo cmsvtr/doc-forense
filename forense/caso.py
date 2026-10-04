@@ -16,6 +16,7 @@ import os
 import platform
 import re
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +30,25 @@ def agora() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def substituir(origem, destino, tentativas: int = 40) -> None:
+    """os.replace que resiste ao Windows.
+
+    No Windows, a troca é recusada («Acesso negado», WinError 5 ou 32) enquanto outro processo
+    estiver com o destino aberto: a interface lendo o progresso, o antivírus examinando o arquivo
+    novo, o OneDrive sincronizando. A trava dura milissegundos; tenta de novo por até ~10 s.
+    """
+    espera = 0.02
+    for i in range(tentativas):
+        try:
+            os.replace(origem, destino)
+            return
+        except PermissionError:
+            if i == tentativas - 1:
+                raise
+            time.sleep(espera)
+            espera = min(espera * 2, 0.5)
+
+
 def escrever_json_atomico(destino: Path, dados) -> None:
     """Grava em arquivo temporário e troca de uma vez: interrupção nunca deixa JSON pela metade."""
     destino.parent.mkdir(parents=True, exist_ok=True)
@@ -36,7 +56,7 @@ def escrever_json_atomico(destino: Path, dados) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(dados, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, destino)
+        substituir(tmp, destino)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
