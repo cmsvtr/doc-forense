@@ -8,6 +8,8 @@ import json
 import os
 import urllib.error
 import urllib.request
+from datetime import datetime
+from pathlib import Path
 
 ENDERECO = os.environ.get("FORENSE_OLLAMA", "http://127.0.0.1:11434")
 MODELO_PADRAO = os.environ.get("FORENSE_MODELO", "qwen2.5:7b")
@@ -89,6 +91,27 @@ def medir_velocidade(modelo: str = MODELO_PADRAO) -> dict:
     }
 
 
+ARQUIVO_VELOCIDADE = Path(__file__).resolve().parent.parent / "casos" / "_ia_velocidade.json"
+
+
+def ler_velocidade() -> dict | None:
+    try:
+        return json.loads(ARQUIVO_VELOCIDADE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def medir_vetores(modelo: str) -> float:
+    """Passagens por segundo na geração de vetores (busca por significado)."""
+    import time
+
+    lote = [_TRECHO_TESTE[:1500]] * 16  # ~250 palavras cada, como as passagens reais
+    _pedir("/api/embed", {"model": modelo, "input": lote[:1], "keep_alive": "10m"}, tempo=600)  # carrega o modelo
+    inicio = time.monotonic()
+    _pedir("/api/embed", {"model": modelo, "input": lote, "keep_alive": "10m"}, tempo=900)
+    return round(len(lote) / (time.monotonic() - inicio), 2)
+
+
 def imprimir(modelo: str = MODELO_PADRAO, medir: bool = True) -> bool:
     s = situacao(modelo)
     if not s["ativo"]:
@@ -111,4 +134,19 @@ def imprimir(modelo: str = MODELO_PADRAO, medir: bool = True) -> bool:
     print(f"  Escrita: {v['escrita_tokens_s']} tokens/s ({v['tokens_escritos']} tokens)")
     print(f"  Carga do modelo: {v['carga_modelo_s']} s · total: {v['total_s']} s · JSON válido: {'sim' if v['json_valido'] else 'NÃO'}")
     print(f"  Estimativa por trecho analisado na etapa 2: ~{v['estimativa_s_por_trecho']} s")
+    if s.get("modelo_vetores_baixado"):
+        try:
+            v["vetores_passagens_s"] = medir_vetores(s["modelo_vetores"])
+            print(f"  Busca por significado ({s['modelo_vetores']}): {v['vetores_passagens_s']} passagens/s")
+        except Exception as e:
+            print(f"  [ -- ] Busca por significado: não medida ({e})")
+    else:
+        print(f"  [ -- ] Modelo da busca por significado ({s.get('modelo_vetores')}) não baixado.")
+    try:
+        ARQUIVO_VELOCIDADE.parent.mkdir(parents=True, exist_ok=True)
+        v["medido_em"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        ARQUIVO_VELOCIDADE.write_text(json.dumps({k: x for k, x in v.items() if k != "resposta"}, ensure_ascii=False, indent=2),
+                                      encoding="utf-8")
+    except OSError:
+        pass
     return v["json_valido"]

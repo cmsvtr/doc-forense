@@ -59,13 +59,13 @@ INSTRUCOES = """Você extrai informações de documentos de uma investigação d
 O texto vem dentro de <documento>, dividido em <pagina n="...">.
 Regras:
 1. Use só o que está escrito dentro de <documento>. Não deduza, não complete, não opine.
-2. Em cada item, primeiro copie em "trecho" as palavras exatas do documento (de 5 a 40 palavras), sem corrigir nada; depois preencha os outros campos a partir desse trecho.
+2. Em cada item, primeiro copie em "trecho" as palavras exatas do documento (de 5 a 25 palavras: só o necessário para provar o item), sem corrigir nada; depois preencha os outros campos a partir desse trecho.
 3. Pessoas e empresas: só as nomeadas no texto. Cargo e empresa da pessoa só se o texto disser.
 4. Eventos: o que alguém fez, combinou ou discutiu. "descricao" em uma frase curta.
 5. Datas no formato AAAA-MM-DD, só quando o texto der dia, mês e ano; senão, deixe vazio.
 6. Se não houver nada de um tipo, devolva a lista vazia."""
 
-VERSAO_EXTRACAO = "2"
+VERSAO_EXTRACAO = "3"
 _HASH_PROMPT = hashlib.sha256((INSTRUCOES + json.dumps(ESQUEMA, sort_keys=True) + VERSAO_EXTRACAO).encode()).hexdigest()[:12]
 
 
@@ -250,7 +250,8 @@ def analisar_documento(caso: Caso, doc: dict, modelo: str, digest: str | None,
                         "duracao_s": round(time.monotonic() - inicio, 1)}
         except Exception as e:  # Ollama fora do ar, tempo esgotado: o trecho fica para a próxima rodada
             registro = {"id": t["id"], "hash": t["hash"], "paginas": [p["n"] for p in t["paginas"]],
-                        "erro": f"{type(e).__name__}: {e}", "achados": [], "descartados": []}
+                        "erro": f"{type(e).__name__}: {e}", "achados": [], "descartados": [],
+                        "duracao_s": round(time.monotonic() - inicio, 1)}
         resultado["trechos"].append(registro)
         resultado["atualizado_em"] = agora()
         escrever_json_atomico(destino, resultado)
@@ -336,7 +337,8 @@ def analisar_caso(caso: Caso, modelo: str = ia.MODELO_PADRAO, documentos: list[s
             def progresso_trecho(i, n, reg, nome=nome):
                 prog.atualizar(atual=f"{nome}: trecho {i}/{n}")
                 log(f"    {nome} trecho {i}/{n}: {len(reg.get('achados', []))} achado(s), "
-                    f"{len(reg.get('descartados', []))} descartado(s){' — ERRO ' + reg['erro'] if reg.get('erro') else ''}")
+                    f"{len(reg.get('descartados', []))} descartado(s), {reg.get('duracao_s', 0):.0f} s"
+                    f"{' — ERRO ' + reg['erro'] if reg.get('erro') else ''}")
 
             r = analisar_documento(caso, doc, modelo, s["digest"], palavras_max, progresso_trecho)
             resumo["documentos"] += 1

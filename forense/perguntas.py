@@ -28,8 +28,8 @@ ESQUEMA = {
 INSTRUCOES = """Você responde perguntas sobre documentos de uma investigação de cartel usando SOMENTE as
 passagens fornecidas dentro de <fonte n="...">.
 Regras:
-1. Cada afirmação precisa de apoio: primeiro copie em "trecho" as palavras exatas da passagem (5 a 40 palavras),
-   indique em "fonte" o número dela e só então escreva a afirmação.
+1. Cada afirmação precisa de apoio: primeiro copie em "trecho" as palavras exatas da passagem,
+   indique em "fonte" o número dela e só então escreva a afirmação. Trechos de 5 a 25 palavras.
 2. Não use conhecimento externo, não deduza além do texto, não opine sobre culpa ou ilicitude.
 3. Se as passagens não respondem à pergunta, devolva "afirmacoes" vazia e "os_trechos_respondem": false.
 4. No máximo 5 afirmações, curtas."""

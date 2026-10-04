@@ -477,9 +477,19 @@ with abas[5]:
                 palavras = st.slider("Palavras por trecho", 400, 2400, PALAVRAS_POR_TRECHO, 100,
                                      help="Trechos menores: respostas mais precisas, mais chamadas à IA.")
             argumentos += ["--palavras", str(palavras)]
-            st.write(f"{len(escolhidos)} documento(s), cerca de {palavras_total:,} palavras "
-                     f"(~{max(1, palavras_total // palavras)} trecho(s)). ".replace(",", ".")
-                     + "Rode o teste de velocidade para estimar o tempo.")
+            from forense.ia import ler_velocidade
+
+            n_trechos = max(1, -(-palavras_total // palavras))
+            vel = ler_velocidade()
+            if vel and vel.get("leitura_tokens_s") and vel.get("escrita_tokens_s"):
+                # leitura proporcional ao tamanho do trecho (~1,9 token por palavra); escrita média de ~400 tokens
+                seg = n_trechos * (palavras * 1.9 / vel["leitura_tokens_s"] + 400 / vel["escrita_tokens_s"])
+                tempo = f"~{seg / 3600:.1f} h" if seg >= 3600 else f"~{max(1, round(seg / 60))} min"
+                estimativa = f"Tempo estimado neste computador: **{tempo}** (pela medição de {vel.get('medido_em', '')[:10]})."
+            else:
+                estimativa = "Rode o testar_ia.bat para estimar o tempo."
+            st.write(f"{len(escolhidos)} documento(s), cerca de {palavras_total:,} palavras ".replace(",", ".")
+                     + f"(~{n_trechos} trecho(s)). " + estimativa)
             pode = sit["ativo"] and sit["modelo_baixado"] and escolhidos and not rodando
             if st.button("▶ Analisar com IA", type="primary", disabled=not pode):
                 lancar_em_segundo_plano(caso, argumentos)

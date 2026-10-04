@@ -75,3 +75,10 @@ def test_medir_velocidade(ollama):
 def test_imprimir_avisa_modelo_na_nuvem(ollama, capsys):
     assert ia.imprimir("qwen2.5:7b", medir=False)
     assert "NUVEM" in capsys.readouterr().out
+
+
+def test_imprimir_grava_velocidade(ollama, tmp_path, monkeypatch):
+    monkeypatch.setattr(ia, "ARQUIVO_VELOCIDADE", tmp_path / "vel.json")
+    assert ia.imprimir("qwen2.5:7b", medir=True)
+    v = ia.ler_velocidade()
+    assert v["leitura_tokens_s"] == 50.0 and v["escrita_tokens_s"] == 5.0 and v["medido_em"]
