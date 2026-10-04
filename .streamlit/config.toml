@@ -13,3 +13,27 @@ serverAddress = "localhost"
 
 [client]
 toolbarMode = "minimal"
+
+[theme]
+# Paleta do Padrão Digital de Governo (gov.br), a mesma do portal do Cade. Sem fontes da internet:
+# o app roda sem rede, então fica a fonte embutida do Streamlit.
+base = "light"
+primaryColor = "#1351B4"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F4FA"
+textColor = "#1B1B1B"
+linkColor = "#1351B4"
+borderColor = "#D0D7E2"
+showWidgetBorder = true
+baseRadius = "small"
+redColor = "#E52207"
+greenColor = "#168821"
+yellowColor = "#B38C00"
+blueColor = "#1351B4"
+
+[theme.sidebar]
+backgroundColor = "#071D41"
+secondaryBackgroundColor = "#0C326F"
+textColor = "#FFFFFF"
+primaryColor = "#5992ED"
+borderColor = "#2A4A7F"
