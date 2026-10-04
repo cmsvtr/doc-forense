@@ -42,7 +42,9 @@ A Etapa 2 usa uma IA que roda **neste computador** (Ollama com o modelo Qwen 2.5
 2. **Entrada:** copie as **pastas dos autos como estão**, com as subpastas, para a pasta `originais` do caso. O nome da pasta de anexo traz o número SEI dos arquivos de dentro: um «Doc. 1.PDF» enviado solto perde a referência. O envio pelo navegador também é de pasta inteira, preservando as subpastas.
 3. **Processar:** roda em segundo plano, então pode fechar o navegador. Se for interrompido, basta processar de novo: o que já foi feito não é refeito.
 4. **Triagem:** ranking de documentos para priorizar a leitura, com o motivo de cada ponto (termo, página e trecho).
-5. **Busca:** texto completo em todos os documentos, sem distinção de acentos (`"frase exata"`, `prefix*`, `termo1 OU termo2`).
+5. **Busca e perguntas:**
+   - **Por palavra:** texto completo em todos os documentos, sem distinção de acentos (`"frase exata"`, `prefix*`, `termo1 OU termo2`).
+   - **Pergunta:** combina a busca por palavra com a busca por significado (acha passagens sem as palavras exatas). Prepare uma vez com "Preparar busca por significado". As passagens encontradas aparecem primeiro; a resposta da IA é opcional, usa só essas passagens e cada afirmação traz o trecho conferido no documento.
 6. **Documento:** texto página a página, com o método (digital ou OCR) e a confiança do OCR.
 Nos resultados da Busca, nos trechos da Triagem e na aba Documento, o botão **📄 Abrir p. N** abre o original no Edge (ou no Chrome) já na página citada; sem esses navegadores, abre no leitor de PDF padrão.
 7. **IA e revisão** (com a IA local instalada):
@@ -50,6 +52,8 @@ Nos resultados da Busca, nos trechos da Triagem e na aba Documento, o botão **�
    - **Revisar achados:** cada pessoa, empresa ou evento vem com o trecho do documento, a página e o botão para abrir o original. A máquina já descartou o que não encontrou no texto. Valide ou rejeite.
    - **Dramatis personae** e **Linha do tempo:** montados só com o que você validou.
 8. **Relatório e custódia:** relatório Word de apoio, verificação de integridade e exportação para a skill `sg-nt:instrucao`.
+
+**Excluir um caso:** na barra lateral, "Excluir caso". A pasta inteira vai para a Lixeira do Windows (recuperável) e a exclusão fica registrada em `casos/_excluidos.jsonl`, com o hash do manifesto.
 
 ## Linha de comando
 

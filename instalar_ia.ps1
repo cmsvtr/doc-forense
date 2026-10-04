@@ -66,6 +66,16 @@ if ($tem) {
     if ($LASTEXITCODE -ne 0) { throw "Falha ao baixar o modelo. Rode este instalador de novo: o download continua de onde parou." }
 }
 
+# 3b. Modelo da busca por significado ------------------------------------------------
+$ModeloVetores = "bge-m3"       # ~1,2 GB
+if ((ollama list) -match [regex]::Escape($ModeloVetores)) {
+    Write-Host "Modelo de busca por significado ($ModeloVetores) já baixado."
+} else {
+    Write-Host "Baixando o modelo da busca por significado ($ModeloVetores, cerca de 1,2 GB)..."
+    ollama pull $ModeloVetores
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Falha ao baixar $ModeloVetores. A busca por palavra continua funcionando; rode o instalador de novo depois." }
+}
+
 # 4. Teste -------------------------------------------------------------------------
 Passo "4/4 Teste de velocidade (a primeira resposta é mais lenta: o modelo é carregado na memória)"
 uv run --no-dev python -m forense ia --modelo $Modelo

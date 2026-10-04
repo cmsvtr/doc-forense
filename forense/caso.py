@@ -260,3 +260,33 @@ def _usuario() -> str:
         return getpass.getuser()
     except Exception:
         return "desconhecido"
+
+
+def excluir_caso(base: Path, caso: "Caso") -> dict:
+    """Manda a pasta do caso para a Lixeira (recuperável) e deixa, fora dela, o registro da exclusão:
+    nome, data, usuário e o hash do manifesto, para a cadeia de custódia mostrar que o caso existiu.
+    Se a Lixeira não estiver disponível (pasta de rede, por exemplo), recusa em vez de apagar de vez."""
+    from send2trash import send2trash
+
+    from .processamento import em_execucao
+
+    if not caso.existe():
+        raise FileNotFoundError(f"Caso não encontrado: {caso.raiz}")
+    if em_execucao(caso):
+        raise RuntimeError("Há um processamento em andamento neste caso. Espere terminar para excluir.")
+    if caso.raiz.resolve().parent != Path(base).resolve():
+        raise PermissionError("Só se excluem pastas de caso de dentro da pasta de casos.")
+    hash_manifesto = None
+    arq = caso.raiz / "manifesto.json.sha256"
+    if arq.exists():
+        hash_manifesto = arq.read_text(encoding="utf-8").split()[0]
+    suportados, _ = caso.listar_originais()
+    registro = {"quando": agora(), "usuario": _usuario(), "evento": "caso_excluido", "caso": caso.nome,
+                "destino": "Lixeira", "originais": len(suportados), "manifesto_sha256": hash_manifesto}
+    try:
+        send2trash(str(caso.raiz))
+    except Exception as e:
+        raise RuntimeError(f"Não foi possível mandar o caso para a Lixeira ({e}). Nada foi apagado.") from e
+    with open(Path(base) / "_excluidos.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(registro, ensure_ascii=False) + "\n")
+    return registro

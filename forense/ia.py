@@ -36,7 +36,7 @@ def _pedir(caminho: str, dados: dict | None = None, tempo: float = 10) -> dict:
 def situacao(modelo: str = MODELO_PADRAO) -> dict:
     """Ollama ativo? Versão? Modelo baixado? Nunca levanta exceção."""
     s = {"endereco": ENDERECO, "ativo": False, "versao": None, "modelo": modelo,
-         "modelo_baixado": False, "modelos": [], "digest": None, "erro": None}
+         "modelo_baixado": False, "modelos": [], "digest": None, "modelo_vetores_baixado": False, "erro": None}
     try:
         s["versao"] = _pedir("/api/version").get("version")
         s["ativo"] = True
@@ -47,6 +47,10 @@ def situacao(modelo: str = MODELO_PADRAO) -> dict:
         s["modelo_baixado"] = alvo in nomes
         # digest: a versão exata dos pesos do modelo, registrada para a análise ser reproduzível
         s["digest"] = next((m.get("digest") for m in modelos if m.get("name") == alvo), None)
+        from .vetores import MODELO_VETORES
+        alvo_v = MODELO_VETORES if ":" in MODELO_VETORES else MODELO_VETORES + ":latest"
+        s["modelo_vetores"] = MODELO_VETORES
+        s["modelo_vetores_baixado"] = alvo_v in nomes
     except (urllib.error.URLError, OSError, ValueError) as e:
         s["erro"] = f"Ollama não respondeu em {ENDERECO} ({e})"
     return s

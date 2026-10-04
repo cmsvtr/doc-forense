@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from docx import Document
 
 from forense.indice import buscar, entidades_do_caso
@@ -298,3 +300,33 @@ def test_pagina_gigante_e_pdf_grande_em_lotes(caso):
     for p in volume["paginas"]:
         assert f"número {p['n']}" in p["texto"], (p["n"], p["texto"])   # cada texto na sua página
         assert (caso.extraido / "caixas" / volume["documento_id"] / f"p{p['n']:04d}.tsv").exists()
+
+
+def test_excluir_caso_vai_para_lixeira_e_deixa_registro(caso, tmp_path, monkeypatch):
+    import json as _json
+
+    from forense.caso import excluir_caso
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))   # Lixeira de teste (Linux)
+    processar_caso(caso, workers=2, log=lambda m: None)
+    base = caso.raiz.parent
+    hash_manifesto = (caso.raiz / "manifesto.json.sha256").read_text(encoding="utf-8").split()[0]
+    excluir_caso(base, caso)
+    assert not caso.raiz.exists()
+    reg = _json.loads((base / "_excluidos.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert reg["caso"] == "caso teste" and reg["manifesto_sha256"] == hash_manifesto
+    lixo = list((tmp_path / "xdg").rglob("caso teste")) + list(base.rglob(".Trash*/files/caso teste"))
+    assert lixo, "o caso deveria estar na Lixeira, recuperável"
+
+
+def test_excluir_recusa_fora_da_pasta_de_casos_e_lixeira_indisponivel(caso, tmp_path, monkeypatch):
+    import send2trash
+
+    from forense.caso import excluir_caso
+
+    with pytest.raises(PermissionError):
+        excluir_caso(tmp_path / "outra_base", caso)
+    monkeypatch.setattr(send2trash, "send2trash", lambda p: (_ for _ in ()).throw(OSError("sem lixeira")))
+    with pytest.raises(RuntimeError, match="Nada foi apagado"):
+        excluir_caso(caso.raiz.parent, caso)
+    assert caso.raiz.exists()

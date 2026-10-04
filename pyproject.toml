@@ -5,10 +5,12 @@ description = "Catálogo, OCR e triagem local de documentos para investigação 
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "beautifulsoup4>=4.12",
+    "numpy>=1.26",
     "pillow>=10.0",
     "pypdfium2>=4.30",
     "pytesseract>=0.3.10",
     "python-docx>=1.1",
+    "send2trash>=1.8",
     "streamlit>=1.40",
 ]
 

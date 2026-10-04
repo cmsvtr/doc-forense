@@ -37,7 +37,22 @@ RESPOSTA_EMAIL = {
 }
 
 
+def _vetor(texto, dim=64):
+    """Vetor de palavras por hash: suficiente para testar a mecânica da busca por significado."""
+    import hashlib
+    import unicodedata
+
+    v = [0.0] * dim
+    base = "".join(c for c in unicodedata.normalize("NFD", texto.lower()) if not unicodedata.combining(c))
+    for w in base.split():
+        w = "".join(ch for ch in w if ch.isalnum())
+        if len(w) >= 4:
+            v[int(hashlib.md5(w[:6].encode()).hexdigest(), 16) % dim] += 1.0
+    return v
+
+
 class _Ollama(BaseHTTPRequestHandler):
+    resposta_pergunta: dict = {}
     chamadas = 0
     falhar = False
     cortar = False
@@ -63,6 +78,11 @@ class _Ollama(BaseHTTPRequestHandler):
         pedido = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         if _Ollama.falhar:
             return self._json({"error": "sem memória"}, 500)
+        if self.path == "/api/embed":
+            return self._json({"embeddings": [_vetor(t) for t in pedido["input"]]})
+        if "<pergunta>" in pedido["messages"][-1]["content"]:
+            return self._json({"message": {"content": json.dumps(_Ollama.resposta_pergunta, ensure_ascii=False)},
+                               "done_reason": "stop"})
         _Ollama.chamadas += 1
         assert pedido["format"]["required"] == ["pessoas", "empresas", "eventos"]  # esquema imposto
         for tipo in ("pessoas", "empresas", "eventos"):                         # trecho antes de tudo

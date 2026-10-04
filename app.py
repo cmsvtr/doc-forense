@@ -41,6 +41,12 @@ def triagem(raiz: str, versao: float) -> dict | None:
     return ler_triagem(Caso(Path(raiz)))
 
 
+@st.cache_data(ttl=30)
+def situacao_ia():
+    from forense.ia import situacao
+    return situacao()
+
+
 @st.cache_data
 def diagnostico():
     from forense.diagnostico import diagnosticar
@@ -106,6 +112,25 @@ with st.sidebar:
             st.success(f"Caso criado: {novo.nome}")
             time.sleep(0.6)
             st.rerun()
+    if casos:
+        with st.expander("Excluir caso"):
+            st.caption("Manda a pasta do caso inteira (originais copiados, extrações, análises e relatórios) para a "
+                       "**Lixeira** do Windows, de onde ainda pode ser recuperada. Os autos de origem, fora do app, "
+                       "não são tocados. Fica registrado em casos/_excluidos.jsonl.")
+            alvo_exc = st.selectbox("Caso a excluir", casos, index=None, placeholder="Escolha", key="exc_caso")
+            confirma = st.text_input("Digite o nome do caso para confirmar", key="exc_conf")
+            if st.button("🗑️ Excluir caso", disabled=not alvo_exc or confirma.strip() != alvo_exc):
+                from forense.caso import excluir_caso
+                try:
+                    excluir_caso(BASE_CASOS, Caso(BASE_CASOS / alvo_exc))
+                    st.success(f"Caso «{alvo_exc}» enviado para a Lixeira.")
+                    for k in ("exc_caso", "exc_conf"):
+                        st.session_state.pop(k, None)
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
+                except (OSError, RuntimeError) as e:
+                    st.error(str(e))
     with st.expander("Diagnóstico da instalação"):
         for nome, ok, detalhe in diagnostico():
             st.write(("✅ " if ok else "❌ ") + f"**{nome}**: {detalhe}")
@@ -120,7 +145,7 @@ docs = documentos(str(caso.raiz), marca)
 rodando = em_execucao(caso)
 
 st.header(caso.nome)
-abas = st.tabs(["1 · Entrada", "2 · Processar", "3 · Triagem", "4 · Busca", "5 · Documento",
+abas = st.tabs(["1 · Entrada", "2 · Processar", "3 · Triagem", "4 · Busca e perguntas", "5 · Documento",
                 "6 · IA e revisão", "7 · Relatório e custódia"])
 
 # ------------------------------------------------------------------ 1. entrada
@@ -253,23 +278,82 @@ with abas[2]:
                             botao_abrir(caso, r["caminho"], tr["pagina"],
                                         f"tri_{r['documento_id']}_{cat}_{ia}_{it}")
 
-# ------------------------------------------------------------------ 4. busca
+# ------------------------------------------------------------------ 4. busca e perguntas
 
 with abas[3]:
     from forense.indice import buscar
 
-    q = st.text_input("Buscar em todos os documentos",
-                      placeholder='ex.: cobertura   ·   "tabela única"   ·   combin*   ·   rodízio OU revezamento')
-    st.caption("Acentos e maiúsculas não importam. Aspas = frase exata; * no fim = prefixo; OU = qualquer um dos termos.")
-    if q:
-        resultados = buscar(caso, q)
-        st.write(f"{len(resultados)} resultado(s){' (limitado a 200)' if len(resultados) == 200 else ''}")
-        for i, r in enumerate(resultados):
-            c_txt, c_bt = st.columns([6, 1])
-            c_txt.markdown(f"**{html.escape(r['localizador'])}, p. {r['pagina']}** — <span style='color:gray'>{html.escape(r['caminho'])}</span>"
-                           f"<br>{destacar(r['trecho'])}", unsafe_allow_html=True)
-            with c_bt:
-                botao_abrir(caso, r["caminho"], r["pagina"], f"busca_{i}_{r['doc_id']}_{r['pagina']}")
+    modo_busca = st.radio("Modo", ["Por palavra", "Pergunta (palavra + significado)"], horizontal=True,
+                          label_visibility="collapsed")
+    if modo_busca == "Por palavra":
+        q = st.text_input("Buscar em todos os documentos",
+                          placeholder='ex.: cobertura   ·   "tabela única"   ·   combin*   ·   rodízio OU revezamento')
+        st.caption("Acentos e maiúsculas não importam. Aspas = frase exata; * no fim = prefixo; OU = qualquer um dos termos.")
+        if q:
+            resultados = buscar(caso, q)
+            st.write(f"{len(resultados)} resultado(s){' (limitado a 200)' if len(resultados) == 200 else ''}")
+            for i, r in enumerate(resultados):
+                c_txt, c_bt = st.columns([6, 1])
+                c_txt.markdown(f"**{html.escape(r['localizador'])}, p. {r['pagina']}** — <span style='color:gray'>{html.escape(r['caminho'])}</span>"
+                               f"<br>{destacar(r['trecho'])}", unsafe_allow_html=True)
+                with c_bt:
+                    botao_abrir(caso, r["caminho"], r["pagina"], f"busca_{i}_{r['doc_id']}_{r['pagina']}")
+    else:
+        from forense.perguntas import responder
+        from forense.vetores import buscar_hibrida
+        from forense.vetores import situacao as situacao_vetores
+
+        sit = situacao_ia()
+        sv = situacao_vetores(caso)
+        if not sit["ativo"]:
+            st.warning("A IA local não está ativa: a pergunta usa só a busca por palavra.")
+        elif not sit.get("modelo_vetores_baixado"):
+            st.warning(f"O modelo da busca por significado ({sit.get('modelo_vetores')}) não está baixado: rode o "
+                       "instalar_ia.bat. Até lá, a pergunta usa só a busca por palavra.")
+        elif sv["documentos"] < sv["total"]:
+            st.info(f"Busca por significado preparada para {sv['documentos']} de {sv['total']} documento(s).")
+            if st.button("Preparar busca por significado", disabled=rodando):
+                lancar_em_segundo_plano(caso, ["indexar-vetores", str(caso.raiz)])
+            st.caption("Roda em segundo plano (progresso na aba Processar). Precisa ser feito uma vez, e de novo "
+                       "só para documentos novos.")
+        pergunta = st.text_input("Pergunte aos documentos",
+                                 placeholder="ex.: quem combinou a divisão dos lotes?  ·  houve contato sobre preços antes do pregão?")
+        st.caption("Mostra primeiro as passagens encontradas, que são o que vale. A resposta da IA é opcional, "
+                   "usa só essas passagens, e cada afirmação traz o trecho conferido no documento.")
+        if pergunta:
+            with st.spinner("Buscando…"):
+                achadas = buscar_hibrida(caso, pergunta)
+            if not achadas:
+                st.info("Nada encontrado.")
+            else:
+                if st.button("🤖 Responder com a IA (usa só as passagens abaixo)",
+                             disabled=not (sit["ativo"] and sit["modelo_baixado"])):
+                    with st.spinner("A IA está lendo as passagens; na CPU isso pode levar alguns minutos…"):
+                        st.session_state["resposta"] = responder(caso, pergunta, achadas, sit["modelo"])
+                resp = st.session_state.get("resposta")
+                if resp and resp["pergunta"] == pergunta:
+                    with st.container(border=True):
+                        if not resp["responde"]:
+                            st.info("Os documentos encontrados não respondem a essa pergunta com segurança.")
+                        for k, a in enumerate(resp["afirmacoes"]):
+                            st.markdown(f"**{html.escape(a['afirmacao_ia'])}**")
+                            c_txt, c_bt = st.columns([6, 1])
+                            c_txt.markdown(f"<blockquote>{html.escape(' '.join(a['trecho_fonte'].split()))}</blockquote>"
+                                           f"<span style='color:gray'>{html.escape(a['localizador'])}</span>",
+                                           unsafe_allow_html=True)
+                            with c_bt:
+                                botao_abrir(caso, a["caminho"], a["pagina"], f"resp_{k}")
+                        if resp["descartadas"]:
+                            st.caption(f"{resp['descartadas']} afirmação(ões) da IA descartada(s): o trecho citado não estava nas passagens.")
+                        st.caption("A frase em negrito é da IA; o trecho abaixo dela é o documento. Confira na fonte.")
+                st.write(f"{len(achadas)} passagem(ns), da mais para a menos relevante:")
+                for i, r in enumerate(achadas):
+                    origem = " + ".join({"palavra": "palavra", "significado": "significado"}[o] for o in r["origens"])
+                    c_txt, c_bt = st.columns([6, 1])
+                    c_txt.markdown(f"**{html.escape(r['localizador'])}** <span style='color:gray'>· achado por {origem}</span>"
+                                   f"<br>{html.escape(' '.join(r['passagem'].split()))}", unsafe_allow_html=True)
+                    with c_bt:
+                        botao_abrir(caso, r["caminho"], r["pagina"], f"hib_{i}_{r['doc_id']}_{r['pagina']}")
 
 # ------------------------------------------------------------------ 5. documento
 
@@ -326,12 +410,6 @@ with abas[4]:
             st.text(pg.get("texto") or "(sem texto)")
 
 # ------------------------------------------------------------------ 6. IA e revisão
-
-@st.cache_data(ttl=30)
-def situacao_ia():
-    from forense.ia import situacao
-    return situacao()
-
 
 def versao_da_analise(caso: Caso) -> float:
     arquivos = list((caso.analise / "ia").glob("*.json")) if (caso.analise / "ia").is_dir() else []
