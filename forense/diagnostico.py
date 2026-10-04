@@ -15,6 +15,13 @@ def diagnosticar(idioma: str = "por") -> list[tuple[str, bool, str]]:
     tessdata = localizar_tessdata(idioma)
     itens.append((f"Idioma do OCR ({idioma})", bool(tessdata), str(tessdata) if tessdata else f"{idioma}.traineddata não encontrado"))
     itens.append(("Busca de texto (SQLite FTS5)", fts5_disponivel(), "ok" if fts5_disponivel() else "indisponível; busca simples será usada"))
+    from .ia import situacao
+    ia = situacao()
+    if ia["ativo"]:
+        det = f"Ollama {ia['versao']}; modelo {ia['modelo']} " + ("baixado" if ia["modelo_baixado"] else "NÃO baixado")
+    else:
+        det = "Ollama não encontrado (só é necessário para a etapa de IA)"
+    itens.append(("IA local (opcional)", ia["ativo"] and ia["modelo_baixado"], det))
     for mod in ("pypdfium2", "pytesseract", "bs4", "docx", "streamlit"):
         try:
             __import__(mod)
@@ -27,6 +34,7 @@ def diagnosticar(idioma: str = "por") -> list[tuple[str, bool, str]]:
 def imprimir() -> bool:
     itens = diagnosticar()
     for nome, ok, detalhe in itens:
-        print(f"  [{'OK' if ok else 'FALHA'}] {nome}: {detalhe}")
-    criticos = [i for i in itens if not i[1] and not i[0].startswith("Busca")]
+        marca = "OK" if ok else (" -- " if "opcional" in nome else "FALHA")
+        print(f"  [{marca}] {nome}: {detalhe}")
+    criticos = [i for i in itens if not i[1] and not i[0].startswith(("Busca", "IA local"))]
     return not criticos

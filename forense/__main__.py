@@ -5,6 +5,7 @@
   verificar <pasta_do_caso>   confere a integridade (hashes) contra o manifesto
   relatorio <pasta_do_caso>   gera o relatório Word de apoio
   exportar-sgnt <pasta>       exporta o corpus (texto e caixas do OCR) para a skill sg-nt:instrucao
+  ia [--modelo M] [--sem-medir]   confere a IA local (Ollama) e mede a velocidade
 """
 
 import argparse
@@ -20,6 +21,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m forense", description="doc-forense")
     sub = ap.add_subparsers(dest="comando", required=True)
     sub.add_parser("diagnostico")
+    pia = sub.add_parser("ia")
+    pia.add_argument("--modelo", default=None)
+    pia.add_argument("--sem-medir", action="store_true")
     p = sub.add_parser("processar")
     p.add_argument("caso", type=Path)
     p.add_argument("--workers", type=int, default=None, help="processos paralelos (padrão: metade dos núcleos lógicos)")
@@ -32,6 +36,10 @@ def main(argv=None) -> int:
     if args.comando == "diagnostico":
         from .diagnostico import imprimir
         return 0 if imprimir() else 1
+
+    if args.comando == "ia":
+        from .ia import MODELO_PADRAO, imprimir as imprimir_ia
+        return 0 if imprimir_ia(args.modelo or MODELO_PADRAO, medir=not args.sem_medir) else 1
 
     from .caso import Caso
     caso = Caso(args.caso)

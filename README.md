@@ -22,6 +22,20 @@ Para usar: clique no atalho **doc-forense** (ou em `abrir.bat`). O navegador abr
 
 Linux/macOS: instale o `tesseract` com o idioma `por` pelo gerenciador de pacotes e rode `uv sync --no-dev` e depois `uv run --no-dev streamlit run app.py`.
 
+## IA local (preparação para a Etapa 2)
+
+A Etapa 2 usa uma IA que roda **neste computador** (Ollama com o modelo Qwen 2.5 7B). Nada é enviado para fora.
+
+**Automático:** feche o app, rode o `atualizar.bat` e depois clique duas vezes em **`instalar_ia.bat`**. Ele instala o Ollama na pasta do usuário (sem administrador), baixa o modelo (cerca de 4,7 GB) e mede a velocidade.
+
+**Manual, se o automático falhar:**
+1. Baixe e instale o Ollama: https://ollama.com/download (botão *Download for Windows*). Não precisa entrar com conta.
+2. Depois de instalado, ele fica ativo em segundo plano (ícone perto do relógio).
+3. Abra o *Prompt de Comando* e rode `ollama pull qwen2.5:7b` (download de cerca de 4,7 GB; se cair, rode de novo e ele continua).
+4. Na pasta do doc-forense, rode `uv run --no-dev python -m forense ia` para conferir e medir a velocidade.
+
+**Sigilo:** use só modelos que rodam no computador. Modelos com `cloud` no nome rodam nos servidores da Ollama; o `python -m forense ia` avisa se houver algum. Não defina a variável `OLLAMA_HOST`: sem ela, o Ollama só aceita conexões deste computador.
+
 ## Uso
 
 1. **Crie um caso** na barra lateral.
