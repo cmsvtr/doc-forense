@@ -40,6 +40,7 @@ RESPOSTA_EMAIL = {
 class _Ollama(BaseHTTPRequestHandler):
     chamadas = 0
     falhar = False
+    cortar = False
 
     def log_message(self, *a):
         pass
@@ -64,10 +65,15 @@ class _Ollama(BaseHTTPRequestHandler):
             return self._json({"error": "sem memória"}, 500)
         _Ollama.chamadas += 1
         assert pedido["format"]["required"] == ["pessoas", "empresas", "eventos"]  # esquema imposto
+        for tipo in ("pessoas", "empresas", "eventos"):                         # trecho antes de tudo
+            assert list(pedido["format"]["properties"][tipo]["items"]["properties"])[0] == "trecho"
+        assert "<documento" in pedido["messages"][-1]["content"]
         assert pedido["options"]["temperature"] == 0 and pedido["options"]["num_ctx"] == ia.CONTEXTO
         texto = pedido["messages"][-1]["content"]
         resposta = RESPOSTA_EMAIL if "proposta de cobertura no lote 2" in texto else {"pessoas": [], "empresas": [], "eventos": []}
-        self._json({"message": {"content": json.dumps(resposta, ensure_ascii=False)},
+        if _Ollama.cortar:
+            return self._json({"message": {"content": '{"pessoas": [{"trecho": "conforme comb'}, "done_reason": "length"})
+        self._json({"message": {"content": json.dumps(resposta, ensure_ascii=False)}, "done_reason": "stop",
                     "prompt_eval_count": 900, "prompt_eval_duration": 9e9, "eval_count": 120, "eval_duration": 6e9})
 
 
@@ -76,7 +82,7 @@ def ollama(monkeypatch):
     srv = HTTPServer(("127.0.0.1", 0), _Ollama)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     monkeypatch.setattr(ia, "ENDERECO", f"http://127.0.0.1:{srv.server_port}")
-    _Ollama.chamadas, _Ollama.falhar = 0, False
+    _Ollama.chamadas, _Ollama.falhar, _Ollama.cortar = 0, False, False
     yield _Ollama
     srv.shutdown()
 
@@ -161,7 +167,7 @@ def test_dividir_em_trechos_preserva_paginas():
     assert [[p["n"] for p in t["paginas"]] for t in trechos][0] == [1, 2]
     assert all(len(" ".join(p["texto"] for p in t["paginas"]).split()) <= 1200 for t in trechos)
     assert {p["n"] for t in trechos for p in t["paginas"]} == {1, 2, 3}           # página vazia não entra
-    assert "[p. 3]" in trechos[-1]["texto_marcado"]
+    assert '<pagina n="3">' in trechos[-1]["texto_marcado"]
 
 
 def test_relatorio_traz_so_os_validados(caso, ollama):
@@ -178,3 +184,15 @@ def test_relatorio_traz_so_os_validados(caso, ollama):
     texto = "\n".join(p.text for p in Document(gerar_relatorio(caso)).paragraphs)
     assert "Dramatis personae (validado pelo analista)" in texto and "Carlos Mendes" in texto
     assert "Engenharia Alfa" not in texto.split("6. Dramatis")[1].split("7. Linha")[0]   # pendente: fora
+
+
+def test_resposta_cortada_vira_erro_explicado(caso, ollama):
+    import json as _json
+
+    processar_caso(caso, workers=2, log=lambda m: None)
+    ollama.cortar = True
+    r = analisar_caso(caso, "qwen2.5:7b", primeiros=1, log=lambda m: None)
+    assert r["erros"] == 1
+    doc_id = next(iter((caso.analise / "ia").glob("*.json"))).stem
+    t = _json.loads((caso.analise / "ia" / f"{doc_id}.json").read_text(encoding="utf-8"))["trechos"][0]
+    assert "cortada" in t["erro"] and "palavras por trecho" in t["erro"]

@@ -21,6 +21,11 @@ from .regex_br import cnpj_valido, extrair_datas
 from .sei import localizador
 
 PALAVRAS_POR_TRECHO = 1200   # calibrar pela velocidade medida no computador do usuário
+LIMITE_RESPOSTA = 2500       # tokens de resposta; acima disso o JSON viria cortado
+
+
+class RespostaCortada(RuntimeError):
+    pass
 CATEGORIAS_EVENTO = [
     "fixação de preços ou condições",
     "divisão de mercado, clientes ou lotes",
@@ -33,31 +38,34 @@ CATEGORIAS_EVENTO = [
 ESQUEMA = {
     "type": "object",
     "properties": {
+        # «trecho» vem PRIMEIRO em cada item: o modelo gera os campos na ordem do esquema, então
+        # copia o texto antes de nomear ou descrever, e o nome sai do que acabou de copiar.
         "pessoas": {"type": "array", "items": {"type": "object", "properties": {
-            "nome": {"type": "string"}, "cargo": {"type": "string"}, "empresa": {"type": "string"},
-            "trecho": {"type": "string"}}, "required": ["nome", "trecho"]}},
+            "trecho": {"type": "string"}, "nome": {"type": "string"}, "cargo": {"type": "string"},
+            "empresa": {"type": "string"}}, "required": ["trecho", "nome"]}},
         "empresas": {"type": "array", "items": {"type": "object", "properties": {
-            "nome": {"type": "string"}, "cnpj": {"type": "string"},
-            "trecho": {"type": "string"}}, "required": ["nome", "trecho"]}},
+            "trecho": {"type": "string"}, "nome": {"type": "string"},
+            "cnpj": {"type": "string"}}, "required": ["trecho", "nome"]}},
         "eventos": {"type": "array", "items": {"type": "object", "properties": {
-            "data": {"type": "string"}, "descricao": {"type": "string"},
-            "participantes": {"type": "array", "items": {"type": "string"}},
+            "trecho": {"type": "string"}, "data": {"type": "string"},
             "categoria": {"type": "string", "enum": CATEGORIAS_EVENTO},
-            "trecho": {"type": "string"}}, "required": ["descricao", "categoria", "trecho"]}},
+            "participantes": {"type": "array", "items": {"type": "string"}},
+            "descricao": {"type": "string"}}, "required": ["trecho", "categoria", "descricao"]}},
     },
     "required": ["pessoas", "empresas", "eventos"],
 }
 
 INSTRUCOES = """Você extrai informações de documentos de uma investigação de cartel.
+O texto vem dentro de <documento>, dividido em <pagina n="...">.
 Regras:
-1. Use só o que está escrito no trecho. Não deduza, não complete, não opine.
-2. Em cada item, copie em "trecho" as palavras exatas do documento (de 5 a 40 palavras), sem corrigir nada.
+1. Use só o que está escrito dentro de <documento>. Não deduza, não complete, não opine.
+2. Em cada item, primeiro copie em "trecho" as palavras exatas do documento (de 5 a 40 palavras), sem corrigir nada; depois preencha os outros campos a partir desse trecho.
 3. Pessoas e empresas: só as nomeadas no texto. Cargo e empresa da pessoa só se o texto disser.
 4. Eventos: o que alguém fez, combinou ou discutiu. "descricao" em uma frase curta.
 5. Datas no formato AAAA-MM-DD, só quando o texto der dia, mês e ano; senão, deixe vazio.
 6. Se não houver nada de um tipo, devolva a lista vazia."""
 
-VERSAO_EXTRACAO = "1"
+VERSAO_EXTRACAO = "2"
 _HASH_PROMPT = hashlib.sha256((INSTRUCOES + json.dumps(ESQUEMA, sort_keys=True) + VERSAO_EXTRACAO).encode()).hexdigest()[:12]
 
 
@@ -96,7 +104,7 @@ def dividir_em_trechos(doc: dict, palavras_max: int = PALAVRAS_POR_TRECHO) -> li
 
     saida = []
     for k, paginas in enumerate(trechos, 1):
-        marcado = "\n\n".join(f"[p. {p['n']}]\n{p['texto']}" for p in paginas)
+        marcado = "\n".join(f'<pagina n="{p["n"]}">\n{p["texto"]}\n</pagina>' for p in paginas)
         saida.append({
             "id": f"{doc['documento_id']}-t{k:03d}",
             "paginas": paginas,
@@ -188,10 +196,10 @@ def perguntar(trecho: dict, doc: dict, modelo: str) -> tuple[dict, dict]:
         "model": modelo, "stream": False, "format": ESQUEMA,
         "messages": [
             {"role": "system", "content": INSTRUCOES},
-            {"role": "user", "content": f"Documento: {localizador(doc)}\n\nTRECHO (as marcas [p. N] indicam a página):\n"
-                                        f"{trecho['texto_marcado']}\n\nExtraia pessoas, empresas e eventos."},
+            {"role": "user", "content": f'<documento citacao="{localizador(doc)}">\n{trecho["texto_marcado"]}\n</documento>\n\n'
+                                        "Extraia pessoas, empresas e eventos do documento acima."},
         ],
-        "options": {"temperature": 0, "seed": 1, "num_ctx": ia.CONTEXTO, "num_predict": 1500},
+        "options": {"temperature": 0, "seed": 1, "num_ctx": ia.CONTEXTO, "num_predict": LIMITE_RESPOSTA},
         "keep_alive": "30m",
     }, tempo=1800)
     conteudo = (r.get("message") or {}).get("content") or "{}"
@@ -199,7 +207,12 @@ def perguntar(trecho: dict, doc: dict, modelo: str) -> tuple[dict, dict]:
         resposta = json.loads(conteudo)
     except ValueError:
         resposta = {"_json_invalido": conteudo[:2000]}
-    medidas = {k: r.get(k) for k in ("prompt_eval_count", "prompt_eval_duration", "eval_count", "eval_duration", "total_duration")}
+    medidas = {k: r.get(k) for k in ("prompt_eval_count", "prompt_eval_duration", "eval_count", "eval_duration",
+                                     "total_duration", "done_reason")}
+    if r.get("done_reason") == "length":
+        # o modelo bateu no limite de tamanho: o JSON veio cortado e os achados do fim se perderam
+        raise RespostaCortada(f"resposta cortada no limite de {LIMITE_RESPOSTA} tokens; "
+                              "reduza as palavras por trecho e analise de novo")
     return resposta, medidas
 
 
