@@ -292,6 +292,50 @@ def _entidades(doc, docs):
                 [4.5, 1.5, 11])
 
 
+def _validados(doc, caso: Caso):
+    """Seções da etapa 2: só o que o analista validou."""
+    from .analise_ia import achados_do_caso
+    from .consolidacao import dramatis_personae, linha_do_tempo
+
+    achados = achados_do_caso(caso)
+    if not achados:
+        return
+    n_val = sum(1 for a in achados if a["revisao"]["status"] == "validado")
+    n_pend = sum(1 for a in achados if a["revisao"]["status"] == "pendente")
+    doc.add_heading("6. Dramatis personae (validado pelo analista)", level=1)
+    doc.add_paragraph(
+        f"Proposto pela IA local, conferido pela máquina (cada trecho existe no documento) e validado pelo analista. "
+        f"{n_val} achado(s) validado(s); {n_pend} ainda pendente(s), fora deste relatório.")
+    dp = dramatis_personae(achados)
+    for rotulo, itens, campos in (("6.1 Pessoas", dp["pessoas"], ("cargos", "empresas")),
+                                  ("6.2 Empresas", dp["empresas"], ("cnpjs",))):
+        doc.add_heading(rotulo, level=2)
+        if not itens:
+            doc.add_paragraph("Nenhum item validado.")
+            continue
+        for i in itens:
+            p = doc.add_paragraph(style="List Bullet")
+            p.add_run(i["nome"]).bold = True
+            extra = "; ".join(", ".join(i[c]) for c in campos if i[c])
+            if extra:
+                p.add_run(f" — {extra}")
+            for f in i["fontes"][:3]:
+                q = doc.add_paragraph(style="Quote")
+                _link(q, f["localizador"], _alvo(caso, f["caminho"]), negrito=True)
+                q.add_run(": «" + " ".join(f["trecho"].split()) + "»")
+
+    doc.add_heading("7. Linha do tempo (validada pelo analista)", level=1)
+    lt = linha_do_tempo(achados)
+    if not lt:
+        doc.add_paragraph("Nenhum evento validado.")
+    else:
+        doc.add_paragraph("A coluna «Resumo» é da IA e não é citação; o trecho é o texto do documento.")
+        _tabela(doc, ["Data", "Categoria", "Resumo (IA)", "Trecho do documento", "Onde"],
+                [[e["data"] or "sem data", e["categoria"], e["descricao_ia"], "«" + " ".join(e["trecho"].split()) + "»",
+                  Link(e["localizador"], _alvo(caso, e["caminho"]))] for e in lt],
+                [2, 3, 3.5, 6, 2.5])
+
+
 def _anexo_custodia(doc, docs, caso: Caso, manifesto):
     doc.add_page_break()
     doc.add_heading("Anexo A — Inventário e cadeia de custódia", level=1)
@@ -376,6 +420,7 @@ def gerar_relatorio(caso: Caso) -> Path:
     _qualidade(doc, docs, manifesto)
     _linha_do_tempo(doc, docs, caso)
     _entidades(doc, docs)
+    _validados(doc, caso)
     _anexo_custodia(doc, docs, caso, manifesto)
     _anexo_metodo(doc, manifesto, triagem)
 

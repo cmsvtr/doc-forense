@@ -70,6 +70,22 @@ def botao_abrir(caso: Caso, relativo: str, pagina: int | None, chave: str, rotul
             st.error(f"Não consegui abrir: {e}")
 
 
+def lancar_em_segundo_plano(caso: Caso, argumentos: list[str]):
+    """Roda «python -m forense …» como processo separado: fechar o navegador não interrompe."""
+    cmd = [sys.executable, "-m", "forense", *argumentos]
+    log = open(caso.log_execucao, "a", encoding="utf-8")
+    opcoes = {"cwd": RAIZ, "stdout": log, "stderr": subprocess.STDOUT,
+              "env": {**os.environ, "PYTHONIOENCODING": "utf-8"}}
+    if sys.platform.startswith("win"):
+        opcoes["creationflags"] = 0x08000000 | 0x00000200  # sem janela, grupo próprio
+    else:
+        opcoes["start_new_session"] = True
+    subprocess.Popen(cmd, **opcoes)
+    st.session_state["lancado_em"] = time.time()
+    time.sleep(1.5)
+    st.rerun()
+
+
 def destacar(trecho: str) -> str:
     """Escapa o texto do documento (nunca é interpretado como HTML) e realça os termos «assim»."""
     return html.escape(" ".join(trecho.split())).replace("«", "<mark>").replace("»", "</mark>")
@@ -104,7 +120,8 @@ docs = documentos(str(caso.raiz), marca)
 rodando = em_execucao(caso)
 
 st.header(caso.nome)
-abas = st.tabs(["1 · Entrada", "2 · Processar", "3 · Triagem", "4 · Busca", "5 · Documento", "6 · Relatório e custódia"])
+abas = st.tabs(["1 · Entrada", "2 · Processar", "3 · Triagem", "4 · Busca", "5 · Documento",
+                "6 · IA e revisão", "7 · Relatório e custódia"])
 
 # ------------------------------------------------------------------ 1. entrada
 
@@ -173,20 +190,8 @@ with abas[1]:
         workers = st.slider("Processos em paralelo", 1, nucleos, max(1, nucleos // 2))
 
     if st.button("▶ Processar documentos", type="primary", disabled=rodando or not suportados):
-        cmd = [sys.executable, "-m", "forense", "processar", str(caso.raiz), "--workers", str(workers)]
-        if forcar_ocr:
-            cmd.append("--forcar-ocr")
-        log = open(caso.log_execucao, "a", encoding="utf-8")
-        opcoes = {"cwd": RAIZ, "stdout": log, "stderr": subprocess.STDOUT,
-                  "env": {**os.environ, "PYTHONIOENCODING": "utf-8"}}
-        if sys.platform.startswith("win"):
-            opcoes["creationflags"] = 0x08000000 | 0x00000200  # sem janela, grupo próprio
-        else:
-            opcoes["start_new_session"] = True
-        subprocess.Popen(cmd, **opcoes)
-        st.session_state["lancado_em"] = time.time()
-        time.sleep(1.5)
-        st.rerun()
+        lancar_em_segundo_plano(caso, ["processar", str(caso.raiz), "--workers", str(workers)]
+                                + (["--forcar-ocr"] if forcar_ocr else []))
 
     @st.fragment(run_every=2)
     def painel_progresso():
@@ -320,9 +325,168 @@ with abas[4]:
                             rotulo=f"📄 Abrir original na p. {pg['n']}" if a["tipo"] == "pdf" else "📄 Abrir original")
             st.text(pg.get("texto") or "(sem texto)")
 
-# ------------------------------------------------------------------ 6. relatório e custódia
+# ------------------------------------------------------------------ 6. IA e revisão
+
+@st.cache_data(ttl=30)
+def situacao_ia():
+    from forense.ia import situacao
+    return situacao()
+
+
+def versao_da_analise(caso: Caso) -> float:
+    arquivos = list((caso.analise / "ia").glob("*.json")) if (caso.analise / "ia").is_dir() else []
+    arquivos.append(caso.analise / "revisao.json")
+    return max((a.stat().st_mtime for a in arquivos if a.exists()), default=0.0)
+
+
+@st.cache_data
+def carregar_achados(raiz: str, versao: float) -> list[dict]:
+    from forense.analise_ia import achados_do_caso
+    return achados_do_caso(Caso(Path(raiz)))
+
+
+ICONE = {"pessoas": "👤", "empresas": "🏢", "eventos": "📅"}
+STATUS = {"pendente": "⏳ pendente", "validado": "✅ validado", "rejeitado": "❌ rejeitado"}
+
+
+def resumo_achado(a: dict) -> str:
+    d = a["dados"]
+    if a["tipo"] == "pessoas":
+        extra = ", ".join(x for x in (d.get("cargo"), d.get("empresa")) if x)
+        return d["nome"] + (f" — {extra}" if extra else "")
+    if a["tipo"] == "empresas":
+        return d["nome"] + (f" (CNPJ {d['cnpj']})" if d.get("cnpj") else "")
+    return f"{d.get('data') or 'sem data'} · {d['categoria']}"
+
 
 with abas[5]:
+    from forense.analise_ia import PALAVRAS_POR_TRECHO, marcar
+    from forense.consolidacao import dramatis_personae, linha_do_tempo
+
+    sit = situacao_ia()
+    if not sit["ativo"]:
+        st.warning("A IA local não está ativa. Rode o instalar_ia.bat ou abra o Ollama pelo menu Iniciar.")
+    elif not sit["modelo_baixado"]:
+        st.warning(f"O modelo {sit['modelo']} não está baixado. Rode o instalar_ia.bat.")
+    else:
+        st.caption(f"IA local: Ollama {sit['versao']}, modelo {sit['modelo']}. Roda neste computador; "
+                   "nada é enviado para fora.")
+    st.caption("A IA propõe; a máquina confere cada trecho no documento e descarta o que não encontra; "
+               "você valida. Dramatis personae, linha do tempo e relatório usam só o que você validar.")
+
+    sub = st.tabs(["Analisar", "Revisar achados", "Dramatis personae", "Linha do tempo"])
+    achados = carregar_achados(str(caso.raiz), versao_da_analise(caso))
+
+    with sub[0]:
+        t = triagem(str(caso.raiz), marca)
+        ordem = (t or {}).get("documentos", [])
+        if not ordem:
+            st.info("Processe os documentos primeiro.")
+        else:
+            modo = st.radio("Quais documentos", ["Os primeiros da triagem", "Escolher documentos"], horizontal=True)
+            argumentos = ["analisar-ia", str(caso.raiz)]
+            if modo == "Os primeiros da triagem":
+                n = st.number_input("Quantos", 1, len(ordem), min(10, len(ordem)))
+                argumentos += ["--primeiros", str(n)]
+                escolhidos = ordem[:n]
+            else:
+                rotulos = {f"#{r['posicao']} {r['arquivo']} ({r['pontuacao']} pts)": r for r in ordem}
+                sel = st.multiselect("Documentos", list(rotulos))
+                escolhidos = [rotulos[x] for x in sel]
+                argumentos += ["--documentos", ",".join(r["documento_id"] for r in escolhidos)]
+            palavras_total = sum(r.get("palavras", 0) for r in escolhidos)
+            with st.expander("Opções avançadas"):
+                palavras = st.slider("Palavras por trecho", 400, 2400, PALAVRAS_POR_TRECHO, 100,
+                                     help="Trechos menores: respostas mais precisas, mais chamadas à IA.")
+            argumentos += ["--palavras", str(palavras)]
+            st.write(f"{len(escolhidos)} documento(s), cerca de {palavras_total:,} palavras "
+                     f"(~{max(1, palavras_total // palavras)} trecho(s)). ".replace(",", ".")
+                     + "Rode o teste de velocidade para estimar o tempo.")
+            pode = sit["ativo"] and sit["modelo_baixado"] and escolhidos and not rodando
+            if st.button("▶ Analisar com IA", type="primary", disabled=not pode):
+                lancar_em_segundo_plano(caso, argumentos)
+            st.caption("Roda em segundo plano e continua de onde parou se for interrompida. "
+                       "O progresso aparece na aba Processar.")
+
+    with sub[1]:
+        if not achados:
+            st.info("Nenhum achado ainda. Rode a análise na aba ao lado.")
+        else:
+            contagem = {k: sum(1 for a in achados if a["revisao"]["status"] == k) for k in STATUS}
+            st.write(" · ".join(f"{STATUS[k]}: **{v}**" for k, v in contagem.items()))
+            c1, c2, c3 = st.columns(3)
+            f_status = c1.selectbox("Situação", ["pendente", "validado", "rejeitado", "todos"])
+            f_tipo = c2.selectbox("Tipo", ["todos", "pessoas", "empresas", "eventos"])
+            docs_achados = sorted({a["localizador"].rsplit(", p.", 1)[0] for a in achados})
+            f_doc = c3.selectbox("Documento", ["todos"] + docs_achados)
+            lista = [a for a in achados
+                     if (f_status == "todos" or a["revisao"]["status"] == f_status)
+                     and (f_tipo == "todos" or a["tipo"] == f_tipo)
+                     and (f_doc == "todos" or a["localizador"].rsplit(", p.", 1)[0] == f_doc)]
+            por_pagina = 15
+            paginas_rev = max(1, -(-len(lista) // por_pagina))
+            pag = st.number_input(f"Página (de {paginas_rev})", 1, paginas_rev, 1) if paginas_rev > 1 else 1
+            for a in lista[(pag - 1) * por_pagina: pag * por_pagina]:
+                with st.container(border=True):
+                    st.markdown(f"{ICONE[a['tipo']]} **{html.escape(resumo_achado(a))}** · {STATUS[a['revisao']['status']]}")
+                    if a["tipo"] == "eventos" and a["dados"].get("descricao_ia"):
+                        st.caption(f"Resumo da IA (não é citação): {a['dados']['descricao_ia']}")
+                        if a["dados"].get("participantes"):
+                            st.caption("Participantes: " + ", ".join(a["dados"]["participantes"]))
+                    st.markdown(f"<blockquote>{html.escape(' '.join(a['trecho_fonte'].split()))}</blockquote>"
+                                f"<span style='color:gray'>{html.escape(a['localizador'])}</span>", unsafe_allow_html=True)
+                    for al in a["alertas"]:
+                        st.caption(f"⚠ {al}")
+                    b1, b2, b3, b4 = st.columns(4)
+                    if b1.button("✅ Validar", key=f"v_{a['id']}"):
+                        marcar(caso, a["id"], "validado")
+                        st.rerun()
+                    if b2.button("❌ Rejeitar", key=f"r_{a['id']}"):
+                        marcar(caso, a["id"], "rejeitado")
+                        st.rerun()
+                    if a["revisao"]["status"] != "pendente" and b3.button("↩ Voltar a pendente", key=f"p_{a['id']}"):
+                        marcar(caso, a["id"], "pendente")
+                        st.rerun()
+                    with b4:
+                        botao_abrir(caso, a["caminho"], a["pagina"], f"ab_{a['id']}")
+
+    with sub[2]:
+        incluir = st.toggle("Incluir pendentes (prévia)", key="dp_pend",
+                            help="Por padrão, só entra o que você validou.")
+        dp = dramatis_personae(achados, incluir_pendentes=incluir)
+        if not dp["pessoas"] and not dp["empresas"]:
+            st.info("Nada validado ainda.")
+        for rotulo, itens, campos in (("Pessoas", dp["pessoas"], ("cargos", "empresas")),
+                                      ("Empresas", dp["empresas"], ("cnpjs",))):
+            if not itens:
+                continue
+            st.subheader(rotulo)
+            st.dataframe(pd.DataFrame([{"Nome": i["nome"], **{c.capitalize(): ", ".join(i[c]) for c in campos},
+                                        "Grafias": ", ".join(i["grafias"]), "Documentos": "; ".join(i["documentos"])}
+                                       for i in itens]), hide_index=True, use_container_width=True)
+            with st.expander(f"Trechos de cada {rotulo.lower()[:-1]}"):
+                for i in itens:
+                    st.markdown(f"**{html.escape(i['nome'])}**")
+                    for f in i["fontes"]:
+                        st.markdown(f"<div style='margin-left:1em'>{html.escape(f['localizador'])}: "
+                                    f"«{html.escape(' '.join(f['trecho'].split()))}»</div>", unsafe_allow_html=True)
+
+    with sub[3]:
+        incluir_lt = st.toggle("Incluir pendentes (prévia)", key="lt_pend")
+        lt = linha_do_tempo(achados, incluir_pendentes=incluir_lt)
+        if not lt:
+            st.info("Nenhum evento validado ainda.")
+        for e in lt:
+            with st.container(border=True):
+                st.markdown(f"**{e['data'] or 'sem data'}** · {html.escape(e['categoria'])}")
+                if e["descricao_ia"]:
+                    st.caption(f"Resumo da IA: {e['descricao_ia']}")
+                st.markdown(f"«{html.escape(' '.join(e['trecho'].split()))}» "
+                            f"<span style='color:gray'>— {html.escape(e['localizador'])}</span>", unsafe_allow_html=True)
+
+# ------------------------------------------------------------------ 7. relatório e custódia
+
+with abas[6]:
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Relatório de apoio (Word)")

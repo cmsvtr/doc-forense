@@ -162,3 +162,19 @@ def test_dividir_em_trechos_preserva_paginas():
     assert all(len(" ".join(p["texto"] for p in t["paginas"]).split()) <= 1200 for t in trechos)
     assert {p["n"] for t in trechos for p in t["paginas"]} == {1, 2, 3}           # página vazia não entra
     assert "[p. 3]" in trechos[-1]["texto_marcado"]
+
+
+def test_relatorio_traz_so_os_validados(caso, ollama):
+    from docx import Document
+
+    from forense.relatorio import gerar_relatorio
+
+    processar_caso(caso, workers=2, log=lambda m: None)
+    analisar_caso(caso, "qwen2.5:7b", log=lambda m: None)
+    pessoa = _achados(caso, "pessoas")[0]
+    evento = next(a for a in _achados(caso, "eventos") if a["dados"].get("data"))
+    marcar(caso, pessoa["id"], "validado")
+    marcar(caso, evento["id"], "validado")
+    texto = "\n".join(p.text for p in Document(gerar_relatorio(caso)).paragraphs)
+    assert "Dramatis personae (validado pelo analista)" in texto and "Carlos Mendes" in texto
+    assert "Engenharia Alfa" not in texto.split("6. Dramatis")[1].split("7. Linha")[0]   # pendente: fora

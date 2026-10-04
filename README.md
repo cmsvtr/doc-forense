@@ -45,7 +45,11 @@ A Etapa 2 usa uma IA que roda **neste computador** (Ollama com o modelo Qwen 2.5
 5. **Busca:** texto completo em todos os documentos, sem distinção de acentos (`"frase exata"`, `prefix*`, `termo1 OU termo2`).
 6. **Documento:** texto página a página, com o método (digital ou OCR) e a confiança do OCR.
 Nos resultados da Busca, nos trechos da Triagem e na aba Documento, o botão **📄 Abrir p. N** abre o original no Edge (ou no Chrome) já na página citada; sem esses navegadores, abre no leitor de PDF padrão.
-7. **Relatório e custódia:** relatório Word de apoio, verificação de integridade e exportação para a skill `sg-nt:instrucao`.
+7. **IA e revisão** (com a IA local instalada):
+   - **Analisar:** escolha os documentos (por padrão, os primeiros da triagem).
+   - **Revisar achados:** cada pessoa, empresa ou evento vem com o trecho do documento, a página e o botão para abrir o original. A máquina já descartou o que não encontrou no texto. Valide ou rejeite.
+   - **Dramatis personae** e **Linha do tempo:** montados só com o que você validou.
+8. **Relatório e custódia:** relatório Word de apoio, verificação de integridade e exportação para a skill `sg-nt:instrucao`.
 
 ## Linha de comando
 
