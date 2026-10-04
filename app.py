@@ -266,7 +266,7 @@ with abas[0]:
                 st.info("Nenhuma pasta escolhida. Se a janela não abriu, cole o caminho ao lado.")
     with c_cam:
         origem_txt = st.text_input("Caminho da pasta", key="origem_importar",
-                                   placeholder=r"ex.: C:\Users\voce\Documents\SEI_08700.000000_2026-00",
+                                   placeholder=r"ex.: C:\Users\voce\Documents\Autos",
                                    label_visibility="collapsed")
     if origem_txt and st.button("⬇ Importar esta pasta para o caso", type="primary", disabled=rodando):
         from forense.importar import validar_origem
