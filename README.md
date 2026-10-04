@@ -72,7 +72,9 @@ O botão "Exportar corpus sg-nt" (ou `exportar-sgnt`) grava, em `exportacao_sgnt
 - `<SEI>.txt`;
 - `_cobertura.tsv` e `_ocr_duvidoso.tsv`.
 
-Copie `_caixas` para `instrucao/corpus/` e rode o `build_corpus.py` com `--sem-ocr`: a skill reaproveita o OCR feito aqui (horas de processamento) em vez de refazê-lo. Testado com o `build_corpus.py` da sg-nt 0.2.1.
+Copie `_caixas` para `instrucao/corpus/` e rode o `build_corpus.py` com `--sem-ocr`: a skill reaproveita o OCR feito aqui (horas de processamento) em vez de refazê-lo.
+
+Use a **sg-nt 0.2.2 ou mais nova**. Até a 0.2.1, o `build_corpus.py` tratava como digital a página escaneada com o carimbo do SEI e ignorava o OCR dela: o corpus ficava só com o carimbo, com cobertura de 100%. A 0.2.2 aplica a mesma regra do doc-forense (imagem em metade da página ou mais e menos de 1.500 caracteres nativos vão ao OCR). Testado com o `build_corpus.py` da 0.2.2, inclusive com `--sem-ocr` sobre as caixas exportadas daqui.
 
 ## Limitações conhecidas
 
