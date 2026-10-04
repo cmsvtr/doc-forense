@@ -23,18 +23,20 @@ st.set_page_config(page_title="doc-forense", page_icon="🔎", layout="wide")
 
 # ------------------------------------------------------------------ dados em cache
 
-def _marca(caso: Caso) -> float:
+def versao_dos_dados(caso: Caso) -> float:
     """Muda sempre que um processamento termina (o manifesto é regravado)."""
     return caso.manifesto.stat().st_mtime if caso.manifesto.exists() else 0.0
 
 
 @st.cache_data(show_spinner="Carregando documentos…")
-def documentos(raiz: str, _marca: float) -> list[dict]:
+def documentos(raiz: str, versao: float) -> list[dict]:
+    # «versao» entra na chave do cache: muda quando um processamento termina. (Parâmetro com
+    # nome iniciado por «_» o Streamlit NÃO usa na chave, e a tela ficava com os dados antigos.)
     return Caso(Path(raiz)).documentos()
 
 
 @st.cache_data
-def triagem(raiz: str, _marca: float) -> dict | None:
+def triagem(raiz: str, versao: float) -> dict | None:
     from forense.triagem import ler_triagem
     return ler_triagem(Caso(Path(raiz)))
 
@@ -83,7 +85,7 @@ if not escolhido:
     st.stop()
 
 caso = Caso(BASE_CASOS / escolhido)
-marca = _marca(caso)
+marca = versao_dos_dados(caso)
 docs = documentos(str(caso.raiz), marca)
 rodando = em_execucao(caso)
 
